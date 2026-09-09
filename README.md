@@ -47,6 +47,11 @@ git clone git@github.com:sbwon-uglee/plmi-statusline.git ~/.claude/plmi
 설치기는 `~/.claude/settings.json` 의 `statusLine` 만 건드리고 나머지 설정은 그대로 둔다.
 쓰기 전에 백업을 뜨고, 플밍이가 아닌 statusLine 이 이미 있으면 `--force` 없이는 덮지 않는다.
 
+## 창으로 띄우기
+
+statusLine 말고 창 하나를 통째로 쓰고 싶으면 `플밍이창.command` 를 더블클릭한다.
+statusLine 은 Claude Code 가 다시 그려 줄 때만 움직이는데, 이쪽은 12fps 로 자기가 그린다.
+
 ## 상태 반영
 
 훅을 쓰지 않는다. Claude Code 가 statusLine 명령에 stdin 으로 넘겨 주는 세션 JSON 에
@@ -82,6 +87,7 @@ plmi/
   dump_frames.py    전 프레임을 HTML 로
   sprites/anim/     구워 둔 스프라이트 JSON. 8상태 x 4크기
 assets/             원화 PNG. 굽는 데만 쓴다
+플밍이창.command     창 하나로 띄우는 실행기. 더블클릭
 ```
 
 실행에는 `sprites/anim` 의 JSON 과 표준 라이브러리만 있으면 된다.
