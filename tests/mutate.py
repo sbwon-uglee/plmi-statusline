@@ -5,6 +5,7 @@
 통과만 하는 검사는 없느니만 못하다. 검사를 고치거나 더할 때 여기도 같이 늘린다.
 원본은 임시 폴더에 떠 두었다가 끝나면 되돌린다.
 """
+import glob
 import json
 import os
 import shutil
@@ -16,7 +17,8 @@ HERE = os.path.dirname(os.path.abspath(__file__))
 ROOT = os.path.dirname(HERE)
 ANIM = os.path.join(ROOT, "plmi", "sprites", "anim")
 CHARS = "0123456789abcdefghijklmn"
-SAMPLE = os.path.join(ANIM, "플밍이_숨쉬기_36x15.json")
+# 줄 수는 굽고 나서 정해지므로 파일 이름에 박아 두면 크기가 바뀔 때마다 깨진다
+SAMPLE = sorted(glob.glob(os.path.join(ANIM, "플밍이_숨쉬기_36x*.json")))[-1]
 INSTALL = os.path.join(ROOT, "plmi", "install.py")
 STATUS = os.path.join(ROOT, "plmi", "statusline.py")
 DOT = os.path.join(ROOT, "plmi", "dot.py")
@@ -52,6 +54,12 @@ def sprite(fn):
         with open(SAMPLE, "w", encoding="utf-8") as f:
             json.dump(a, f, ensure_ascii=False)
     return go
+
+
+def fill_bottom(a):
+    """아래 여백을 없앤다. 모드 표시줄과 맞닿아 보이던 그 상태로 되돌린다."""
+    a["frames"] = ["\n".join(f.split("\n")[:-1] + ["\u28ff" * a["cw"]])
+                   for f in a["frames"]]
 
 
 def swap(src, old, new):
@@ -132,6 +140,9 @@ def main():
                       "def fit_color(m, lay, cw=26, sub=5, gain=1.0):"),
           "test_layout", "test_얼굴과_몸과_색이_같은_Layout_을_받는다",
           "fit_color 가 칸 수를 따로 받게", out)
+
+    guard([SAMPLE], sprite(fill_bottom), "test_sprites",
+          "test_아래에_빈_줄이_있다", "맨 아랫줄을 채움", out)
 
     missed = [label for label, hit in out if not hit]
     print(f"\n망가뜨린 {len(out)}가지 중 {len(out) - len(missed)}가지를 잡았다")

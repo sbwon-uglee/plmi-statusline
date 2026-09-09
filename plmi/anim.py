@@ -79,6 +79,11 @@ def breathe(n, depth, period=None, lift=0.0, sway=0, only=None):
 # 넘겨야 깜빡임이 깜빡임으로 보인다. 나머지는 비워 두면 한 바퀴 길이로 맞춘다.
 HOLD = {"숨쉬기": 1.0}
 
+# 캐릭터 아래에 비워 둘 줄. statusLine 바로 밑에 모드 표시줄이 붙어서, 발이 격자 맨
+# 아랫줄까지 닿으면 그 줄과 맞닿아 보인다. 잘라내기가 끝난 뒤에 붙인다. 배율을 정할 때
+# 끼워 넣으면 위쪽 여유를 그만큼 빼앗겨 캐릭터가 통째로 작아진다(26칸 10%, 16칸 27%).
+MARGIN_BOTTOM = 1
+
 PALETTE_N = 24
 GAIN = 3.0                     # 칸 색 대비. 삼각면 진폭이 밝기 ±14 라 그대로 쓰면 무늬가 안 보인다.
                                # 평균을 축으로 벌려 준다
@@ -233,11 +238,13 @@ def main():
              for y in rows]
     lo = next((y for y in rows if not blank[y]), 0)
     hi = next((y for y in reversed(rows) if not blank[y]), CH - 1) + 1
-    ch_out = hi - lo
+    ch_out = hi - lo + MARGIN_BOTTOM
+    gap_art = ["\u2800" * CW] * MARGIN_BOTTOM
+    gap_tint = ["." * CW] * MARGIN_BOTTOM
 
     for name, (fps, frames, tints) in built.items():
-        frames = ["\n".join(f.split("\n")[lo:hi]) for f in frames]
-        tints = ["\n".join(t.split("\n")[lo:hi]) for t in tints]
+        frames = ["\n".join(f.split("\n")[lo:hi] + gap_art) for f in frames]
+        tints = ["\n".join(t.split("\n")[lo:hi] + gap_tint) for t in tints]
         dst = os.path.join(OUT, f"플밍이_{name}_{CW}x{ch_out}.json")
         with open(dst, "w", encoding="utf-8") as f:
             json.dump({"cw": CW, "ch": ch_out, "fps": fps, "hold": HOLD.get(name),

@@ -110,3 +110,19 @@ def test_볼이_입_윗점이_든_칸에_있다():
         if size == big:
             assert checked >= (checked + skipped) * 0.9, \
                 f"{big}: 잰 것이 {checked}개뿐이고 {skipped}개를 건너뛰었다"
+
+def test_아래에_빈_줄이_있다():
+    """statusLine 바로 밑에 모드 표시줄이 붙는다. 발이 맨 아랫줄까지 닿으면 맞닿아 보인다.
+
+    잘라내기는 어느 프레임에서도 안 쓰는 줄을 위아래로 걷어 낸다. 그래서 여백을 두려면
+    걷어 낸 뒤에 붙여야 하는데, 그 자리를 지우면 조용히 원래대로 돌아간다.
+    """
+    for size in grid.sizes():
+        for state in grid.STATES:
+            a = grid.load(state, size)
+            for i, f in enumerate(a["frames"]):
+                last = f.split("\n")[-1]
+                assert set(last) == {"\u2800"}, f"{size} {state} {i}번 맨 아랫줄에 점이 있다"
+            for i, t in enumerate(a["tints"]):
+                last = t.split("\n")[-1]
+                assert set(last) == {"."}, f"{size} {state} {i}번 맨 아랫줄에 색이 있다"
