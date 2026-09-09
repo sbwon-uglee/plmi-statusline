@@ -138,7 +138,7 @@ def main():
     def layout(face, pose):
         """한 프레임의 기하를 한 번만 정하고 셋이 나눠 쓴다.
 
-        전에는 face_art·fit·fit_color 에 CW·CH·scale·자세를 따로따로 넘겼다. 인자가
+        전에는 face_art 와 fit 과 fit_color 에 칸 수와 배율과 자세를 따로따로 넘겼다. 인자가
         하나만 어긋나도 얼굴과 몸과 색이 다른 자리를 잡는데 그게 화면에서는 볼이
         흘러내린 것으로 보였다. 이제 어긋날 자리가 없다.
         """
