@@ -47,6 +47,17 @@ RUNNER = os.path.join(HERE, "statusline.py")
 SIZES = sorted({os.path.basename(f).rsplit("_", 1)[1][:-5]
                 for f in glob.glob(os.path.join(HERE, "sprites", "anim", "*.json"))},
                key=lambda s: -int(s.split("x")[0]))
+# 줄 수는 굽고 나서 정해지므로 기본 크기를 글자로 박아 두면 그때마다 없는 크기가 된다.
+# 26칸에 가장 가까운 것을 고른다
+DEFAULT_SIZE = min(SIZES, key=lambda s: abs(int(s.split("x")[0]) - 26)) if SIZES else ""
+
+
+def version():
+    try:
+        with open(os.path.join(os.path.dirname(HERE), "VERSION"), encoding="utf-8") as f:
+            return f.read().strip()
+    except OSError:
+        return "0.0.0"
 
 
 def settings_path(scope):
@@ -89,7 +100,8 @@ def mine(entry):
 
 def main():
     ap = argparse.ArgumentParser(description="플밍이 statusLine 설치")
-    ap.add_argument("--size", default="26x10", choices=SIZES,
+    ap.add_argument("--version", action="version", version=version())
+    ap.add_argument("--size", default=DEFAULT_SIZE, choices=SIZES,
                     help=f"그림 크기. 있는 것 = {', '.join(SIZES)}")
     ap.add_argument("--scope", default="user", choices=("user", "project"),
                     help="user 는 ~/.claude, project 는 지금 폴더의 .claude")

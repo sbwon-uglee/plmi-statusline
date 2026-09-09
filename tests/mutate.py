@@ -149,6 +149,10 @@ def main():
           "test_install", "test_brew_로_깔면_버전_없는_경로를_쓴다",
           "brew 경로를 Cellar 그대로 씀", out)
 
+    guard([INSTALL], swap(INSTALL, 'default=DEFAULT_SIZE', 'default="26x10"'),
+          "test_install", "test_기본_크기가_실제로_있는_크기다",
+          "기본 크기를 옛 줄 수로 박음", out)
+
     missed = [label for label, hit in out if not hit]
     print(f"\n망가뜨린 {len(out)}가지 중 {len(out) - len(missed)}가지를 잡았다")
     if missed:

@@ -127,3 +127,25 @@ def test_brew_로_깔면_버전_없는_경로를_쓴다():
         assert os.path.join(d, "opt", "plmi") in cmd, cmd
         assert "0.1.0" not in cmd, f"경로에 버전이 박혔다: {cmd}"
         assert os.path.exists(cmd.split()[-1]), cmd
+
+def test_기본_크기가_실제로_있는_크기다():
+    """줄 수는 굽고 나서 정해진다. 기본값을 글자로 박아 두면 그때마다 없는 크기가 된다."""
+    out = subprocess.run([sys.executable, INSTALL, "--help"],
+                         capture_output=True, text=True, timeout=60)
+    assert out.returncode == 0, out.stderr
+    with tempfile.TemporaryDirectory() as d:
+        assert run(d).returncode == 0
+        size = settings(d)["statusLine"]["command"].split("PLMI_SIZE=")[1].split()[0]
+    anim = os.path.join(grid.ROOT, "plmi", "sprites", "anim")
+    hit = [f for f in os.listdir(anim) if f.endswith(f"_{size}.json")]
+    assert hit, f"기본 크기 {size} 로 구운 스프라이트가 없다"
+
+
+def test_버전을_말할_수_있다():
+    """brew 가 깐 것과 저장소의 VERSION 이 같은지 사람이 확인할 길이 있어야 한다."""
+    out = subprocess.run([sys.executable, INSTALL, "--version"],
+                         capture_output=True, text=True, timeout=60)
+    assert out.returncode == 0, out.stderr
+    said = out.stdout.strip()
+    with open(os.path.join(grid.ROOT, "VERSION"), encoding="utf-8") as f:
+        assert said == f.read().strip(), f"--version 이 {said}"
