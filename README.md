@@ -3,46 +3,42 @@
 Claude Code 의 statusLine 자리에 사는 플밍이. 어글리랩 마스코트를 브라유 점으로 그려서,
 지금 Claude 가 무엇을 하고 있는지에 따라 표정과 자세가 바뀐다.
 
-터미널 한 줄이 아니라 여러 줄을 쓴다. 26칸 기준으로 10줄이다.
+터미널 한 줄이 아니라 여러 줄을 쓴다. 26칸 기준으로 11줄이다.
 
 ## 설치
 
 ```bash
-mkdir -p ~/.claude/plmi && gh api repos/sbwon-uglee/plmi-statusline/tarball | tar xz -C ~/.claude/plmi --strip-components=1
-~/.claude/plmi/install.sh
+brew install sbwon-uglee/plmi/plmi
+plmi
 ```
 
-Claude Code 를 다시 띄우면 나온다. 클론하지 않고 받기만 한다. 1초 안에 끝난다.
+Claude Code 를 다시 띄우면 나온다. 필요한 것은 brew 와 python3 뿐이고, python3 는 맥에
+기본으로 들어 있다.
 
-필요한 것은 python3 와 `gh` 뿐이다. python3 는 맥에 기본으로 들어 있고, `gh` 는
-비공개 저장소라 인증에 쓴다. 이미 `gh auth login` 이 되어 있으면 그대로 된다.
+올릴 때는 `brew upgrade plmi`, 뗄 때는 `plmi --uninstall` 뒤에 `brew uninstall plmi`.
+설정에 적히는 경로에는 버전이 안 들어가므로 판을 올려도 상태줄이 안 깨진다.
 
-받는 위치는 아무 데나 되고, 옮기면 `install.sh` 를 다시 돌리면 된다.
-`statusline.py` 가 스프라이트를 자기 파일 기준으로 찾으므로 어느 폴더에서 Claude Code 를
-띄우든 그대로 돈다.
-
-### 새 판으로 올리기
-
-같은 두 줄을 다시 돌리면 된다. 받는 자리를 통째로 덮어쓴다.
-
-### git 으로 받고 싶으면
+### brew 없이
 
 ```bash
-git clone git@github.com:sbwon-uglee/plmi-statusline.git ~/.claude/plmi
-~/.claude/plmi/install.sh
+git clone https://github.com/sbwon-uglee/plmi-statusline.git ~/.claude/plmi
+python3 ~/.claude/plmi/plmi/install.py
 ```
+
+받는 위치는 아무 데나 되고, 옮기면 `install.py` 를 다시 돌리면 된다. `statusline.py` 가
+스프라이트를 자기 파일 기준으로 찾으므로 어느 폴더에서 Claude Code 를 띄우든 그대로 돈다.
 
 ### 옵션
 
 ```bash
-./install.sh --size 36x15      크게
-./install.sh --scope project   지금 폴더의 .claude 에만
-./install.sh --uninstall       뗀다
-./install.sh --dry-run         쓸 내용만 본다
+plmi --size 36x16             크게
+plmi --scope project          지금 폴더의 .claude 에만
+plmi --uninstall              뗀다
+plmi --dry-run                쓸 내용만 본다
 ```
 
-크기는 36x15, 26x10, 20x9, 16x7 네 가지다. 앞이 칸 수, 뒤가 줄 수다.
-좁은 창이나 분할 화면이면 20x9 나 16x7 을 쓴다.
+크기는 36x16, 26x11, 20x10, 16x8 네 가지다. 앞이 칸 수, 뒤가 줄 수다.
+좁은 창이나 분할 화면이면 20x10 이나 16x8 을 쓴다.
 
 설치기는 `~/.claude/settings.json` 의 `statusLine` 만 건드리고 나머지 설정은 그대로 둔다.
 쓰기 전에 백업을 뜨고, 플밍이가 아닌 statusLine 이 이미 있으면 `--force` 없이는 덮지 않는다.

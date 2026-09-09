@@ -2,7 +2,7 @@
 # 플밍이를 Claude Code statusLine 에 붙인다. 인자는 plmi/install.py 로 그대로 넘어간다.
 #
 #   ./install.sh                 사용자 설정에 붙인다
-#   ./install.sh --size 36x15    큰 그림으로
+#   ./install.sh --size 36x16    큰 그림으로
 #   ./install.sh --uninstall     뗀다
 set -e
 
