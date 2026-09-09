@@ -429,6 +429,7 @@ def face_art(m, cw, ch, scale, squeeze, sx=1.0, sy=1.0, dx=0, dy=0,
     ox = (W - tw0) // 2 + (tw0 - tw) // 2 + dx
     oy = (H - th0) // 2 + (th0 - th) + dy
     face = np.zeros(m["face"].shape, bool)
+    mouth_top = None
 
     def stamp(cells, r0, c0):
         for ry, rx in cells:
@@ -472,11 +473,15 @@ def face_art(m, cw, ch, scale, squeeze, sx=1.0, sy=1.0, dx=0, dy=0,
         hh = max(r for r, _ in cells) + 1
         cy = (lips[:, 0].min() + lips[:, 0].max()) / 2
         cx = (lips[:, 1].min() + lips[:, 1].max()) / 2
-        stamp(cells, round(oy + cy * th / h - hh / 2),
-              round(ox + cx * tw / w - mw / 2))
+        r0 = round(oy + cy * th / h - hh / 2)
+        stamp(cells, r0, round(ox + cx * tw / w - mw / 2))
+        mouth_top = r0 + min(r for r, _ in cells)
 
     out = dict(m)
     out["face"] = face
+    # 볼 높이를 여기에 맞춘다. 입을 찍은 점 줄을 그대로 넘겨야 프레임마다 간격이 안 흔들린다.
+    if mouth_top is not None:
+        out["mouth_top"] = mouth_top
     return out
 
 
@@ -576,15 +581,21 @@ def fit_color(m, cw=26, ch=12, scale=None, pad=1, squeeze=0.909,
             # 같은 높이다(원본1 40.2% 대 39.5% · 원본2 42.8% 대 43.0%). 입 무게중심은
             # 45~47% 로 다섯 점이나 낮아서, 거기 맞추면 입이 두 줄에 걸칠 때 볼이 아랫줄로
             # 떨어져 입보다 낮아 보인다. 두 짝이 한 줄을 같이 써야 크기도 같아진다.
-            others = [c for c in _components(keep_face) if len(c) > 200]
-            if others:
-                mouth = max(others, key=lambda c: c[:, 0].mean())
-                # 🔴반올림이 아니라 내림이다. 5.85 는 5번 칸 안에 있는데 반올림하면 6번
-                # 칸으로 내려가 볼이 입 아래로 떨어진다. 칸 번호는 그 점을 품은 칸이다.
-                top = int((oy + mouth[:, 0].min() * th / h) / 4 - (fh - 1) / 2)
+            # 🔴그린 입의 점 줄을 그대로 쓴다. 원화 마스크에서 따로 재서 반올림하면 몸이
+            # 눌릴 때 입은 한 줄 올라가는데 볼은 안 올라가, 간격이 1과 2 사이를 오간다
+            # (36칸 작업중에서 실제로 그랬다).
+            # 🔴내림이다. 5.85 는 5번 칸 안에 있는데 반올림하면 6번 칸으로 내려가 볼이
+            # 입 아래로 떨어진다. 칸 번호는 그 점을 품은 칸이다.
+            if m.get("mouth_top") is not None:
+                top = int(m["mouth_top"]) // 4 - (fh - 1) // 2
             else:
-                top = int(np.mean([(oy + c[:, 0].mean() * th / h) / 4
-                                   for c in blobs]) - (fh - 1) / 2)
+                others = [c for c in _components(keep_face) if len(c) > 200]
+                if others:
+                    mouth = max(others, key=lambda c: c[:, 0].mean())
+                    top = int((oy + mouth[:, 0].min() * th / h) / 4 - (fh - 1) / 2)
+                else:
+                    top = int(np.mean([(oy + c[:, 0].mean() * th / h) / 4
+                                       for c in blobs]) - (fh - 1) / 2)
             mid = np.mean([c[:, 1].mean() for c in blobs])
             for c in blobs:
                 cx = (ox + c[:, 1].mean() * tw / w) / 2
@@ -606,8 +617,9 @@ def fit_color(m, cw=26, ch=12, scale=None, pad=1, squeeze=0.909,
                                             and 0 <= b and b + fh <= ch
                                             and not busy[b:b + fh, a:a + n].any()
                                             and inside[b:b + fh, a:a + n].all())
-                    for dyy in (0, -1, 1):
-                        for shift in (0, out, 2 * out, 3 * out, -out, -2 * out):
+                    # 줄은 고정한다. 위아래로도 비키게 두면 입과의 간격이 프레임마다 달라진다
+                    for dyy in (0,):
+                        for shift in (0, out, 2 * out, 3 * out, -out, -2 * out, 4 * out):
                             if free(x0 + shift, fw, base_y + dyy):
                                 x0, y0, placed = x0 + shift, base_y + dyy, True
                                 break
