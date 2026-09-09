@@ -22,6 +22,7 @@ echo 0.1.0 > VERSION              chore: VERSION bump to 0.1.0
                                   docs: changelog 0.1.0
 git switch main && git merge --ff-only v0.1.0
 git tag -a v0.1.0 -m "release v0.1.0"
+git branch -d v0.1.0              태그와 이름이 겹치므로 낸 뒤에는 지운다
 ```
 
 굽는 것이 들어간 버전은 태그 전에 `./build.sh` 가 통과해야 한다. 스프라이트는 저장소에
