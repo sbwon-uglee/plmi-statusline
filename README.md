@@ -88,6 +88,8 @@ plmi/
   sprites/anim/     구워 둔 스프라이트 JSON. 8상태 x 4크기
 assets/             원화 PNG. 굽는 데만 쓴다
 플밍이창.command     창 하나로 띄우는 실행기. 더블클릭
+build.sh            다시 굽고 검사까지
+tests/              검사 25건
 ```
 
 실행에는 `sprites/anim` 의 JSON 과 표준 라이브러리만 있으면 된다.
@@ -96,10 +98,13 @@ assets/             원화 PNG. 굽는 데만 쓴다
 ## 고쳐 쓰기
 
 ```bash
-uv run --with numpy --with pillow python plmi/anim.py --cols 26
+./build.sh              네 크기 전부 다시 굽고 검사까지
+./build.sh 36 26        고른 크기만
 ```
 
-크기를 바꾸려면 `--cols` 를 준다. 줄 수는 자동으로 잡는다.
+크기를 바꾸려면 인자로 칸 수를 준다. 줄 수는 자동으로 잡는다.
+`build.sh` 는 옛 스프라이트를 먼저 지우고, 다 구운 뒤 `tests/` 를 돌린다.
+검사가 하나라도 깨지면 거기서 멈춘다.
 표정을 바꾸려면 `plmi/dot.py` 의 `EYE_ART` 와 `MOUTH_ART` 에 점 패턴을 고치거나 더한다.
 
 굽고 나서 눈으로 확인하려면 전 프레임을 HTML 로 뽑는다.
@@ -108,8 +113,26 @@ uv run --with numpy --with pillow python plmi/anim.py --cols 26
 uv run --with numpy --with pillow python plmi/dump_frames.py
 ```
 
-크기를 바꿔 구우면 결과 파일 이름의 줄 수가 달라진다. 굽기 전에
-`plmi/sprites/anim/*.json` 을 지우지 않으면 옛 이름의 파일이 남아 그것을 보게 된다.
+크기를 바꿔 구우면 결과 파일 이름의 줄 수가 달라진다. `build.sh` 가 굽기 전에
+옛 파일을 지운다. `anim.py` 를 직접 부를 때는 손으로 지워야 한다.
+
+## 검사
+
+```bash
+python3 tests/run.py            전부
+python3 tests/run.py sprites    이름에 sprites 가 들어간 것만
+python3 tests/mutate.py         검사가 실제로 잡는지 본다
+```
+
+25건이다. 스프라이트가 지켜야 하는 것(좌우 대칭, 볼 자리, 머리 잘림, 프레임 중복),
+실행 쪽이 지켜야 하는 것(표준 라이브러리만, 크기별 줄 수, 배경색 안 씀),
+설치기가 지켜야 하는 것(남의 설정을 안 건드림, 절대경로, 백업)을 본다.
+
+여기 적힌 검사는 전부 한 번씩 실제로 깨졌던 것이다. 무엇이 어떻게 깨졌는지는
+`docs/DECISIONS.md`.
+
+`mutate.py` 는 일부러 여덟 가지를 망가뜨려 그 검사가 실패하는지 본다. 통과만 하는
+검사는 없느니만 못하므로, 검사를 고치거나 더할 때 여기도 같이 늘린다.
 
 ## 요구 사항
 
