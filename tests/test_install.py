@@ -1,6 +1,7 @@
 """설치기가 남의 설정을 망가뜨리지 않는지."""
 import json
 import os
+import shutil
 import subprocess
 import sys
 import tempfile
@@ -99,3 +100,30 @@ def test_python3_을_PATH_에서_찾는다():
     with tempfile.TemporaryDirectory() as d:
         run(d)
         assert " python3 " in settings(d)["statusLine"]["command"]
+
+def test_brew_로_깔면_버전_없는_경로를_쓴다():
+    """Cellar 경로를 적으면 다음 `brew upgrade` 가 그 폴더를 지워 상태줄이 조용히 죽는다.
+
+    brew 는 `<prefix>/Cellar/<이름>/<버전>/` 에 두고 `<prefix>/opt/<이름>` 이 지금 버전을
+    가리키게 한다. 설정에는 opt 쪽이 들어가야 버전을 올려도 산다.
+    """
+    with tempfile.TemporaryDirectory() as d:
+        cellar = os.path.join(d, "Cellar", "plmi", "0.1.0", "libexec")
+        os.makedirs(cellar)
+        shutil.copytree(os.path.join(grid.ROOT, "plmi"), os.path.join(cellar, "plmi"))
+        os.makedirs(os.path.join(d, "opt"))
+        os.symlink(os.path.join(d, "Cellar", "plmi", "0.1.0"),
+                   os.path.join(d, "opt", "plmi"))
+
+        proj = os.path.join(d, "proj")
+        os.makedirs(proj)
+        out = subprocess.run(
+            [sys.executable, os.path.join(cellar, "plmi", "install.py"),
+             "--scope", "project"],
+            cwd=proj, capture_output=True, text=True, timeout=60)
+        assert out.returncode == 0, out.stderr
+        cmd = settings(proj)["statusLine"]["command"]
+        assert "/Cellar/" not in cmd, cmd
+        assert os.path.join(d, "opt", "plmi") in cmd, cmd
+        assert "0.1.0" not in cmd, f"경로에 버전이 박혔다: {cmd}"
+        assert os.path.exists(cmd.split()[-1]), cmd

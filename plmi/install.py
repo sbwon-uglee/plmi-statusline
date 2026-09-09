@@ -17,10 +17,32 @@ import datetime
 import glob
 import json
 import os
+import re
 import shutil
 import sys
 
-HERE = os.path.dirname(os.path.abspath(__file__))
+CELLAR = re.compile(r"(?P<prefix>.*)/Cellar/(?P<name>[^/]+)/[^/]+/(?P<rest>.*)")
+
+
+def stable(path):
+    """설정에 적어도 버전이 올라가면서 깨지지 않을 경로로 바꾼다.
+
+    brew 는 파일을 `<prefix>/Cellar/<이름>/<버전>/` 에 두고 `<prefix>/opt/<이름>` 이
+    지금 버전을 가리키게 한다. Cellar 쪽을 settings.json 에 적으면 다음 `brew upgrade`
+    가 그 폴더를 지워 상태줄이 아무 말 없이 죽는다. opt 쪽은 링크가 옮겨갈 뿐이라 산다.
+
+    brew 로 깐 것이 아니면 실제 경로를 그대로 쓴다. `bin/plmi` 처럼 심볼릭 링크로 부를
+    수 있으므로 realpath 로 한 번 편 뒤에 본다.
+    """
+    real = os.path.realpath(path)
+    m = CELLAR.match(real)
+    if not m:
+        return real
+    opt = os.path.join(m.group("prefix"), "opt", m.group("name"), m.group("rest"))
+    return opt if os.path.exists(opt) else real
+
+
+HERE = os.path.dirname(stable(__file__))
 RUNNER = os.path.join(HERE, "statusline.py")
 SIZES = sorted({os.path.basename(f).rsplit("_", 1)[1][:-5]
                 for f in glob.glob(os.path.join(HERE, "sprites", "anim", "*.json"))},

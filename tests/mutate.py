@@ -144,6 +144,11 @@ def main():
     guard([SAMPLE], sprite(fill_bottom), "test_sprites",
           "test_아래에_빈_줄이_있다", "맨 아랫줄을 채움", out)
 
+    guard([INSTALL], swap(INSTALL, "HERE = os.path.dirname(stable(__file__))",
+                          "HERE = os.path.dirname(os.path.realpath(__file__))"),
+          "test_install", "test_brew_로_깔면_버전_없는_경로를_쓴다",
+          "brew 경로를 Cellar 그대로 씀", out)
+
     missed = [label for label, hit in out if not hit]
     print(f"\n망가뜨린 {len(out)}가지 중 {len(out) - len(missed)}가지를 잡았다")
     if missed:
