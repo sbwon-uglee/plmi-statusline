@@ -19,6 +19,7 @@ CHARS = "0123456789abcdefghijklmn"
 SAMPLE = os.path.join(ANIM, "플밍이_숨쉬기_36x15.json")
 INSTALL = os.path.join(ROOT, "plmi", "install.py")
 STATUS = os.path.join(ROOT, "plmi", "statusline.py")
+DOT = os.path.join(ROOT, "plmi", "dot.py")
 
 
 def fires(mod, case):
@@ -120,6 +121,17 @@ def main():
     guard([INSTALL], swap(INSTALL, 'return f"PLMI_SIZE={size} python3 {RUNNER}"',
                           'return f"PLMI_SIZE={size} python3 plmi/statusline.py"'),
           "test_install", "test_절대경로를_쓴다", "상대경로로 바꿈", out)
+
+    # 기하를 Layout 밖으로 도로 풀어 쓰는 것이 이 코드가 늘 되돌아가던 자리다
+    guard([DOT], swap(DOT, '    body, face = m["body"], m["face"]',
+                      '    body, face = m["body"], m["face"]\n'
+                      "    ox2 = (lay.W - lay.tw0) // 2 + (lay.tw0 - lay.tw) // 2"),
+          "test_layout", "test_기하식은_Layout_안에만_있다",
+          "가로 오프셋 식을 fit 안에 다시 씀", out)
+    guard([DOT], swap(DOT, "def fit_color(m, lay, sub=5, gain=1.0):",
+                      "def fit_color(m, lay, cw=26, sub=5, gain=1.0):"),
+          "test_layout", "test_얼굴과_몸과_색이_같은_Layout_을_받는다",
+          "fit_color 가 칸 수를 따로 받게", out)
 
     missed = [label for label, hit in out if not hit]
     print(f"\n망가뜨린 {len(out)}가지 중 {len(out) - len(missed)}가지를 잡았다")

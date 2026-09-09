@@ -139,11 +139,63 @@ def masks(path, rim=0.02, drop=0.85, warm=10, hipass=24):
     return out
 
 
-def fit(m, cw=26, ch=11, scale=None, pad=1, thin=0.22, blush=0,
-        texture=0, rim=None, squeeze=0.909, sx=1.0, sy=1.0, dx=0, dy=0):
+class Layout:
+    """원화를 점 격자 어디에 얼마로 앉힐지 한 곳에서 정한다.
+
+    `fit`, `face_art`, `fit_color` 가 같은 여덟 줄을 각자 세우고 있었다. 한 곳만 고치면
+    나머지 둘이 다른 자리를 잡아 볼이 입에서 떨어지고 눈 옆에 얼룩이 남았다. 셋이 이
+    객체를 나눠 받으면 어긋날 자리가 없다.
+
+    좌표계가 둘이다. 원화 픽셀 `(h, w)` 와 점 격자 `(H, W)`. `tw0`·`th0` 는 자세를 주기
+    전 기준 크기, `tw`·`th` 는 자세를 준 뒤 크기다. **자리는 기준 크기로 잡고 크기만
+    자세로 준다.** 눌린 프레임이 바닥을 붙인 채 위로만 줄어야 떡이 공중에 뜨지 않는다.
+    """
+
+    __slots__ = ("h", "w", "cw", "ch", "W", "H", "pad", "squeeze", "scale",
+                 "tw0", "th0", "tw", "th", "ox", "oy")
+
+    def __init__(self, shape, cw, ch, scale=None, pad=1, squeeze=0.909,
+                 sx=1.0, sy=1.0, dx=0, dy=0):
+        self.h, self.w = shape
+        self.cw, self.ch = cw, ch
+        self.W, self.H = cw * 2, ch * 4
+        self.pad, self.squeeze = pad, squeeze
+        self.scale = self.fill(shape, cw, ch, pad, squeeze) if scale is None else scale
+        self.tw0 = max(1, round(self.w * self.scale))
+        self.th0 = max(1, round(self.h * self.scale * squeeze))
+        self.tw = max(1, round(self.tw0 * sx))
+        self.th = max(1, round(self.th0 * sy))
+        self.ox = (self.W - self.tw0) // 2 + (self.tw0 - self.tw) // 2 + dx
+        self.oy = (self.H - self.th0) // 2 + (self.th0 - self.th) + dy
+
+    @staticmethod
+    def fill(shape, cw, ch, pad=1, squeeze=0.909):
+        """자세를 안 준 그림이 격자를 꽉 채우는 배율."""
+        h, w = shape
+        return min((cw * 2 - 2 * pad) / w, (ch * 4 - 2 * pad) / (h * squeeze))
+
+    def to_src(self, r0, c0, ry, rx):
+        """격자 점 한 칸이 덮는 원화 픽셀 범위 (y0, y1, x0, x1)."""
+        y0 = max(0, int(np.ceil((r0 + ry - self.oy) * self.h / self.th)))
+        y1 = min(self.h, int(np.floor((r0 + ry + 1 - self.oy) * self.h / self.th)))
+        x0 = max(0, int(np.ceil((c0 + rx - self.ox) * self.w / self.tw)))
+        x1 = min(self.w, int(np.floor((c0 + rx + 1 - self.ox) * self.w / self.tw)))
+        return y0, y1, x0, x1
+
+    def row(self, src_y):
+        """원화 세로 좌표를 격자 점 줄로."""
+        return self.oy + src_y * self.th / self.h
+
+    def col(self, src_x):
+        """원화 가로 좌표를 격자 점 칸으로."""
+        return self.ox + src_x * self.tw / self.w
+
+
+def fit(m, lay, thin=0.22, blush=0, texture=0, rim=None):
     """몸통 비율을 지켜 점 격자 가운데 앉히고 얼굴·볼·결정면을 파낸다.
 
-    scale 을 밖에서 넘기면 표정이 여럿일 때 캐릭터 크기가 프레임마다 튀지 않는다.
+    자리와 크기는 `lay`(Layout)가 정한다. 같은 프레임을 그리는 `face_art`·`fit_color` 와
+    **같은 Layout 을 받아야** 셋이 같은 자리를 잡는다.
     thin 은 얼굴 점을 인정할 면적 비율이라, 낮게 잡아야 한 점 폭이 안 되는 입선이 남는다.
     볼터치는 파내지 않는다(blush=0 이 기본). 색이 붙기 전에는 한 칸 걸러 파서 표시했는데,
     색으로 칠할 수 있게 된 뒤로는 그 구멍이 볼에 낀 검은 점으로 보인다. 색만 입힌다.
@@ -152,20 +204,11 @@ def fit(m, cw=26, ch=11, scale=None, pad=1, thin=0.22, blush=0,
     칸 수에 비례해 잡는다. 칸이 늘면 점이 잘아져 같은 두께로는 테두리가 헐기 때문이다.
     squeeze 는 세로 눌림이다. 터미널 칸이 가로 1 세로 2 보다 길면 점이 세로로 늘어져
     캐릭터가 홀쭉해 보이므로, 그만큼 세로를 미리 줄여 둔다.
-    sx·sy 는 프레임마다 주는 눌림과 늘림, dx·dy 는 점 단위 이동이다. 눌리면 바닥을 붙여
-    둔 채 위로만 줄어든다. 가운데를 기준으로 줄이면 떡이 공중에 뜬 것처럼 보인다.
     """
     body, face = m["body"], m["face"]
     if rim is None:
-        rim = max(2, round(cw / 13))
-    W, H = cw * 2, ch * 4
-    h, w = body.shape
-    if scale is None:
-        scale = min((W - 2 * pad) / w, (H - 2 * pad) / (h * squeeze))
-    tw0, th0 = max(1, round(w * scale)), max(1, round(h * scale * squeeze))
-    tw, th = max(1, round(tw0 * sx)), max(1, round(th0 * sy))
-    ox = (W - tw0) // 2 + (tw0 - tw) // 2 + dx
-    oy = (H - th0) // 2 + (th0 - th) + dy
+        rim = max(2, round(lay.cw / 13))
+    W, H, tw, th, ox, oy = lay.W, lay.H, lay.tw, lay.th, lay.ox, lay.oy
 
     def put(arr, mode, keep=False):
         a = np.asarray(arr, dtype=np.float64)
@@ -199,12 +242,7 @@ def fit(m, cw=26, ch=11, scale=None, pad=1, thin=0.22, blush=0,
 
 def scale_for(paths, cw=26, ch=11, pad=1, squeeze=0.909):
     """여러 표정이 같은 크기로 나오도록 가장 빡빡한 배율을 고른다."""
-    W, H = cw * 2, ch * 4
-    out = []
-    for p in paths:
-        h, w = masks(p)["body"].shape
-        out.append(min((W - 2 * pad) / w, (H - 2 * pad) / (h * squeeze)))
-    return min(out)
+    return min(Layout.fill(masks(p)["body"].shape, cw, ch, pad, squeeze) for p in paths)
 
 
 def _components(mask, min_px=200):
@@ -408,8 +446,7 @@ def _wedge(wd, hd, flip=False):
 SHAPES = {"-": _bar, "<": _wedge}
 
 
-def face_art(m, cw, ch, scale, squeeze, sx=1.0, sy=1.0, dx=0, dy=0,
-             eye="뜬눈", mouth="원본"):
+def face_art(m, lay, eye="뜬눈", mouth="원본"):
     """눈과 입을 점 격자에 찍어 새 얼굴 마스크를 만든다.
 
     자리와 크기는 원화에서 재고(`face0`), 모양은 `EYE_ART`·`MOUTH_ART` 패턴으로 찍는다.
@@ -421,22 +458,13 @@ def face_art(m, cw, ch, scale, squeeze, sx=1.0, sy=1.0, dx=0, dy=0,
     색에 섞여 눈 옆 칸이 올리브색 얼룩이 됐다. 점 칸을 먼저 정하고 그 칸을 원화 좌표로
     되돌려 채우면 줄일 때 그 점만 정확히 찬다.
     """
-    body = m["body"]
-    h, w = body.shape
-    W, H = cw * 2, ch * 4
-    tw0, th0 = max(1, round(w * scale)), max(1, round(h * scale * squeeze))
-    tw, th = max(1, round(tw0 * sx)), max(1, round(th0 * sy))
-    ox = (W - tw0) // 2 + (tw0 - tw) // 2 + dx
-    oy = (H - th0) // 2 + (th0 - th) + dy
+    h, w, tw, th = lay.h, lay.w, lay.tw, lay.th
     face = np.zeros(m["face"].shape, bool)
     mouth_top = None
 
     def stamp(cells, r0, c0):
         for ry, rx in cells:
-            y0 = max(0, int(np.ceil((r0 + ry - oy) * h / th)))
-            y1 = min(h, int(np.floor((r0 + ry + 1 - oy) * h / th)))
-            x0 = max(0, int(np.ceil((c0 + rx - ox) * w / tw)))
-            x1 = min(w, int(np.floor((c0 + rx + 1 - ox) * w / tw)))
+            y0, y1, x0, x1 = lay.to_src(r0, c0, ry, rx)
             if y1 > y0 and x1 > x0:
                 face[y0:y1, x0:x1] = True
 
@@ -462,8 +490,7 @@ def face_art(m, cw, ch, scale, squeeze, sx=1.0, sy=1.0, dx=0, dy=0,
             hh = max(r for r, _ in cells) + 1
             cy = (c[:, 0].min() + c[:, 0].max()) / 2
             cx = (c[:, 1].min() + c[:, 1].max()) / 2
-            stamp(cells, round(oy + cy * th / h - hh / 2),
-                  round(ox + cx * tw / w - ew / 2))
+            stamp(cells, round(lay.row(cy) - hh / 2), round(lay.col(cx) - ew / 2))
 
     if lips is not None:
         bx, by = MOUTH_BOX.get(mouth, (1.0, 1.0))
@@ -473,8 +500,8 @@ def face_art(m, cw, ch, scale, squeeze, sx=1.0, sy=1.0, dx=0, dy=0,
         hh = max(r for r, _ in cells) + 1
         cy = (lips[:, 0].min() + lips[:, 0].max()) / 2
         cx = (lips[:, 1].min() + lips[:, 1].max()) / 2
-        r0 = round(oy + cy * th / h - hh / 2)
-        stamp(cells, r0, round(ox + cx * tw / w - mw / 2))
+        r0 = round(lay.row(cy) - hh / 2)
+        stamp(cells, r0, round(lay.col(cx) - mw / 2))
         mouth_top = r0 + min(r for r, _ in cells)
 
     out = dict(m)
@@ -485,9 +512,8 @@ def face_art(m, cw, ch, scale, squeeze, sx=1.0, sy=1.0, dx=0, dy=0,
     return out
 
 
-def fit_color(m, cw=26, ch=12, scale=None, pad=1, squeeze=0.909,
-              sx=1.0, sy=1.0, dx=0, dy=0, sub=5, gain=1.0):
-    """`fit` 과 똑같은 자리에서 칸별 색을 낸다.
+def fit_color(m, lay, sub=5, gain=1.0):
+    """`fit` 과 똑같은 자리에서 칸별 색을 낸다. 같은 Layout 을 받으므로 자리가 어긋날 수 없다.
 
     세 가지를 지킨다.
     1. 🔴몸 밖 픽셀을 빼고 평균한다. 그냥 평균하면 테두리 칸이 투명한 검정과 섞여 어두워지고
@@ -505,14 +531,9 @@ def fit_color(m, cw=26, ch=12, scale=None, pad=1, squeeze=0.909,
     warm = m["blush"]
     # 🔴볼도 몸 색에서 뺀다. 남겨 두면 볼 둘레 칸이 분홍끼를 띠어 도장 밖까지 볼로 보인다.
     keep = body & ~m["face"] & ~m.get("face0", m["face"]) & ~warm
-    W, H = cw * 2, ch * 4
-    h, w = body.shape
-    if scale is None:
-        scale = min((W - 2 * pad) / w, (H - 2 * pad) / (h * squeeze))
-    tw0, th0 = max(1, round(w * scale)), max(1, round(h * scale * squeeze))
-    tw, th = max(1, round(tw0 * sx)), max(1, round(th0 * sy))
-    ox = (W - tw0) // 2 + (tw0 - tw) // 2 + dx
-    oy = (H - th0) // 2 + (th0 - th) + dy
+    cw, ch, W, H = lay.cw, lay.ch, lay.W, lay.H
+    h, w, tw0, th0 = lay.h, lay.w, lay.tw0, lay.th0
+    tw, th, ox, oy = lay.tw, lay.th, lay.ox, lay.oy
 
     def put(arr, chan):
         """원본을 그 자리에 놓고 칸을 sub 등분한 격자로 줄인다."""
@@ -571,12 +592,12 @@ def fit_color(m, cw=26, ch=12, scale=None, pad=1, squeeze=0.909,
             keep_face = m.get("face0", m["face"]) | m["face"]
             fmask = put(keep_face * 255, 1) / 255.0
             hit = fmask.reshape(ch, sub, cw, sub).mean(axis=(1, 3)) > 0
-            pad = np.zeros((ch + 2, cw + 2), bool)
-            pad[1:-1, 1:-1] = hit
+            grown = np.zeros((ch + 2, cw + 2), bool)
+            grown[1:-1, 1:-1] = hit
             near = np.zeros_like(hit)
             for dyy in (0, 1, 2):                     # 대각선까지 여덟 방향
                 for dxx in (0, 1, 2):
-                    near |= pad[dyy:dyy + ch, dxx:dxx + cw]
+                    near |= grown[dyy:dyy + ch, dxx:dxx + cw]
             # 🔴줄은 입의 윗변에 맞춘다. 원화 두 장을 재면 볼 평균중심과 입 윗변이 거의
             # 같은 높이다(원본1 40.2% 대 39.5% · 원본2 42.8% 대 43.0%). 입 무게중심은
             # 45~47% 로 다섯 점이나 낮아서, 거기 맞추면 입이 두 줄에 걸칠 때 볼이 아랫줄로
@@ -592,13 +613,13 @@ def fit_color(m, cw=26, ch=12, scale=None, pad=1, squeeze=0.909,
                 others = [c for c in _components(keep_face) if len(c) > 200]
                 if others:
                     mouth = max(others, key=lambda c: c[:, 0].mean())
-                    top = int((oy + mouth[:, 0].min() * th / h) / 4 - (fh - 1) / 2)
+                    top = int(lay.row(mouth[:, 0].min()) / 4 - (fh - 1) / 2)
                 else:
-                    top = int(np.mean([(oy + c[:, 0].mean() * th / h) / 4
+                    top = int(np.mean([lay.row(c[:, 0].mean()) / 4
                                        for c in blobs]) - (fh - 1) / 2)
             mid = np.mean([c[:, 1].mean() for c in blobs])
             for c in blobs:
-                cx = (ox + c[:, 1].mean() * tw / w) / 2
+                cx = lay.col(c[:, 1].mean()) / 2
                 y0 = max(0, top)
                 x0 = max(0, int(cx - (fw - 1) / 2))
                 # 🔴눈에 걸리면 바깥으로 비키고, 그래도 걸리면 걸린 쪽부터 줄인다.
@@ -660,8 +681,7 @@ def headroom_scale(masks_, poses, cw=26, ch=11, squeeze=0.909, pad=1):
     높이로 따져서 놀람 2·3번의 머리가 잘렸다(윗줄 폭 31점, 몸통 폭 55점).
     """
     W, H = cw * 2, ch * 4
-    base = min(min((W - 2 * pad) / m["body"].shape[1],
-                   (H - 2 * pad) / (m["body"].shape[0] * squeeze)) for m in masks_)
+    base = min(Layout.fill(m["body"].shape, cw, ch, pad, squeeze) for m in masks_)
     tw0 = max(m["body"].shape[1] for m in masks_) * base
     th0 = max(m["body"].shape[0] for m in masks_) * base * squeeze
     sx = max(p[0] for p in poses)
@@ -688,5 +708,6 @@ if __name__ == "__main__":
         bd = float(sys.argv[4]) if len(sys.argv) > 4 else 0.72
         print(dots(p, cw, ch, bd))
     else:
-        print(fit(masks(p), cw, ch,
-                  texture=opt("--texture", 0), squeeze=opt("--squeeze", 0.909)))
+        m = masks(p)
+        lay = Layout(m["body"].shape, cw, ch, squeeze=opt("--squeeze", 0.909))
+        print(fit(m, lay, texture=opt("--texture", 0)))

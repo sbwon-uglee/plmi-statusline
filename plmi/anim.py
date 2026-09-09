@@ -17,7 +17,7 @@ import sys
 import numpy as np
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
-from dot import face_art, fit, fit_color, headroom_scale, masks
+from dot import Layout, face_art, fit, fit_color, headroom_scale, masks
 
 HERE = os.path.dirname(os.path.abspath(__file__))
 ROOT = os.path.dirname(HERE)
@@ -133,15 +133,27 @@ def main():
     os.makedirs(OUT, exist_ok=True)
     M = {k: masks(os.path.join(SRC, v)) for k, v in FACES.items()}
     cache = {}
+    lays = {}
 
+    def layout(face, pose):
+        """한 프레임의 기하를 한 번만 정하고 셋이 나눠 쓴다.
+
+        전에는 face_art·fit·fit_color 에 CW·CH·scale·자세를 따로따로 넘겼다. 인자가
+        하나만 어긋나도 얼굴과 몸과 색이 다른 자리를 잡는데 그게 화면에서는 볼이
+        흘러내린 것으로 보였다. 이제 어긋날 자리가 없다.
+        """
+        key = (face, pose)
+        if key not in lays:
+            sx, sy, dx, dy = pose
+            lays[key] = Layout(M[face]["body"].shape, CW, CH, scale=scale,
+                               squeeze=SQUEEZE, sx=sx, sy=sy, dx=dx, dy=dy)
+        return lays[key]
 
     def variant(face, eye, mouth, pose=(1.0, 1.0, 0, 0)):
         # 점 격자에 찍으므로 자세마다 자리가 달라진다. 자세까지 열쇠에 넣는다.
         key = (face, eye, mouth, pose)
         if key not in cache:
-            sx, sy, dx, dy = pose
-            cache[key] = face_art(M[face], CW, CH, scale, SQUEEZE,
-                                  sx=sx, sy=sy, dx=dx, dy=dy, eye=eye, mouth=mouth)
+            cache[key] = face_art(M[face], layout(face, pose), eye=eye, mouth=mouth)
         return cache[key]
 
     rest = breathe(14, 0.05, sway=1, only="squash")
@@ -177,6 +189,7 @@ def main():
     print(f"  {CW}칸 · 굽는 줄 {CH} · 배율 {scale:.4f}")
 
     cache.clear()
+    lays.clear()
 
     # 색은 자세만 따라가므로 원화와 자세로만 뽑는다(눈·입 모양과 무관)
     # 색은 자세와 입 모양만 따라간다. 눈은 파낸 자리라 몸 색에 안 들어가고, 입은 그 둘레를
@@ -187,8 +200,8 @@ def main():
             key = (face, mouth, sx, sy, dx, dy)
             if key not in tint:
                 tint[key] = fit_color(variant(face, "뜬눈", mouth, (sx, sy, dx, dy)),
-                                      CW, CH, scale=scale, squeeze=SQUEEZE,
-                                      sx=sx, sy=sy, dx=dx, dy=dy, gain=GAIN / BLUSH)
+                                      layout(face, (sx, sy, dx, dy)),
+                                      gain=GAIN / BLUSH)
     body_mean = np.mean([c[v] for c, v in tint.values()][0], axis=0)
     for key, (col, cov) in tint.items():
         tint[key] = (np.clip(body_mean + (col - body_mean) * GAIN, 0, 255), cov)
@@ -207,8 +220,8 @@ def main():
     built = {}
     for name, (fps, sp) in anims.items():
         built[name] = (fps,
-                       [fit(variant(face, eye, mouth, (sx, sy, dx, dy)), CW, CH,
-                            scale=scale, squeeze=SQUEEZE, sx=sx, sy=sy, dx=dx, dy=dy)
+                       [fit(variant(face, eye, mouth, (sx, sy, dx, dy)),
+                            layout(face, (sx, sy, dx, dy)))
                         for (sx, sy, dx, dy), eye, mouth, face in sp],
                        ["\n".join(paint((face, mouth, sx, sy, dx, dy)))
                         for (sx, sy, dx, dy), _, mouth, face in sp])
