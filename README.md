@@ -138,3 +138,8 @@ python3 tests/mutate.py         검사가 실제로 잡는지 본다
 | 굽기 | numpy, pillow |
 | 글꼴 | 브라유 점자(U+2800 부터)를 그리는 고정폭 글꼴. JetBrains Mono 기준으로 맞춰 두었다 |
 | 색 | 트루컬러 터미널 |
+
+## 라이선스
+
+사내용입니다. 공개 저장소인 것은 Homebrew 가 tarball 을 받을 수 있게 하려는 것이고
+오픈소스로 낸 것이 아닙니다. 자세한 것은 `LICENSE`.
