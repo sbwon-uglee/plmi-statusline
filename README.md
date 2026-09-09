@@ -8,15 +8,29 @@ Claude Code 의 statusLine 자리에 사는 플밍이. 어글리랩 마스코트
 ## 설치
 
 ```bash
-git clone git@github.com:sbwon-uglee/plmi-statusline.git ~/.claude/plmi
+mkdir -p ~/.claude/plmi && gh api repos/sbwon-uglee/plmi-statusline/tarball | tar xz -C ~/.claude/plmi --strip-components=1
 ~/.claude/plmi/install.sh
 ```
 
-Claude Code 를 다시 띄우면 나온다. 필요한 것은 python3 하나뿐이고 맥에는 기본으로 들어 있다.
+Claude Code 를 다시 띄우면 나온다. 클론하지 않고 받기만 한다. 1초 안에 끝난다.
 
-클론 위치는 아무 데나 되고, 옮기면 `install.sh` 를 다시 돌리면 된다.
+필요한 것은 python3 와 `gh` 뿐이다. python3 는 맥에 기본으로 들어 있고, `gh` 는
+비공개 저장소라 인증에 쓴다. 이미 `gh auth login` 이 되어 있으면 그대로 된다.
+
+받는 위치는 아무 데나 되고, 옮기면 `install.sh` 를 다시 돌리면 된다.
 `statusline.py` 가 스프라이트를 자기 파일 기준으로 찾으므로 어느 폴더에서 Claude Code 를
 띄우든 그대로 돈다.
+
+### 새 판으로 올리기
+
+같은 두 줄을 다시 돌리면 된다. 받는 자리를 통째로 덮어쓴다.
+
+### git 으로 받고 싶으면
+
+```bash
+git clone git@github.com:sbwon-uglee/plmi-statusline.git ~/.claude/plmi
+~/.claude/plmi/install.sh
+```
 
 ### 옵션
 
