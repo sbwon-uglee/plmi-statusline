@@ -51,3 +51,34 @@ git tag -a v0.1.0 -m "release v0.1.0"
 `CHANGELOG.md` 맨 위에 새 항목을 얹는다. **쓰는 사람이 무엇을 다르게 겪는지**를 적고,
 왜 그렇게 만들었는지와 접은 대안은 `docs/DECISIONS.md` 에 둔다. 둘을 섞으면 받는 사람은
 자기와 무관한 내부 사정을 읽게 되고, 나중에 우리는 결정 근거를 릴리스 노트에서 찾게 된다.
+
+## brew 로 내보내기
+
+탭은 포뮬러 하나를 담은 공개 저장소다. 이름에 `homebrew-` 접두어가 붙어야 brew 가 알아본다.
+
+```
+sbwon-uglee/homebrew-plmi
+└── Formula/plmi.rb
+```
+
+받는 사람은 이 한 줄이면 된다.
+
+```
+brew install sbwon-uglee/plmi/plmi
+plmi
+```
+
+포뮬러 원본은 `packaging/plmi.rb` 에 둔다. 버전을 낼 때 `url` 의 태그와 `sha256` 을 고쳐
+탭 저장소에 올린다.
+
+```
+curl -sL https://github.com/sbwon-uglee/plmi-statusline/archive/refs/tags/v0.1.0.tar.gz \
+  | shasum -a 256
+```
+
+**소스 저장소가 공개여야 한다.** 비공개면 brew 가 tarball 을 못 받아서 받는 사람마다
+토큰을 잡아 줘야 하고, 그러면 한 줄 설치가 아니게 된다.
+
+brew 는 파일을 `<prefix>/Cellar/plmi/<버전>/` 에 두고 `<prefix>/opt/plmi` 가 지금 버전을
+가리키게 한다. 설정에 적히는 것은 opt 쪽이라 버전을 올려도 상태줄이 안 깨진다
+(`install.py` 의 `stable`).
