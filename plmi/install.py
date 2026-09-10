@@ -60,9 +60,41 @@ def version():
         return "0.0.0"
 
 
-def settings_path(scope):
-    root = os.path.expanduser("~") if scope == "user" else os.getcwd()
+def settings_path(scope, where=None):
+    """붙일 settings.json 자리.
+
+    `user` 는 홈, `project` 는 워크스페이스 폴더다. 워크스페이스는 `where` 로 지목한다.
+    비우면 지금 폴더다. 지목할 길이 없으면 붙이려는 워크스페이스마다 그 폴더로 옮겨
+    가야 하고, 어디에 붙였는지도 셸 이력에만 남는다.
+    """
+    if scope == "user":
+        return os.path.join(os.path.expanduser("~"), ".claude", "settings.json")
+    root = os.path.abspath(os.path.expanduser(where or os.getcwd()))
     return os.path.join(root, ".claude", "settings.json")
+
+
+def installed_at():
+    """플밍이가 붙어 있는 settings.json 을 찾는다.
+
+    떼려면 어디에 붙였는지 알아야 하는데, 프로젝트 스코프로 여러 워크스페이스에 붙이면
+    사람이 그것을 기억하고 있어야 했다.
+    """
+    seen, out = set(), []
+    home = os.path.expanduser("~")
+    roots = [home]
+    # 워크스페이스가 홈 아래 몇 단계에 있는지는 사람마다 다르다. 네 단계까지 훑는다
+    for depth in range(1, 5):
+        pattern = os.path.join(home, *["*"] * depth, ".claude", "settings.json")
+        roots += [os.path.dirname(os.path.dirname(p)) for p in glob.glob(pattern)]
+    for root in roots:
+        path = os.path.join(root, ".claude", "settings.json")
+        if path in seen or not os.path.exists(path):
+            continue
+        seen.add(path)
+        entry = load(path).get("statusLine")
+        if any_plmi(entry):
+            out.append((path, entry.get("command", "")))
+    return out
 
 
 def load(path):
@@ -93,6 +125,18 @@ def command(size):
     return f"PLMI_SIZE={size} python3 {RUNNER}"
 
 
+def any_plmi(entry):
+    """어느 판이든 플밍이면 True.
+
+    `mine` 은 지금 이 파일이 낸 경로만 알아본다. 붙인 자리를 찾을 때는 그것으로 부족하다.
+    brew 로 깐 것, 클론해 쓰는 것, 옛 경로에 남은 것이 다 다른 경로를 갖는다.
+    """
+    if not isinstance(entry, dict):
+        return False
+    cmd = str(entry.get("command", ""))
+    return "PLMI_SIZE" in cmd and "statusline.py" in cmd
+
+
 def mine(entry):
     """이 저장소가 넣은 statusLine 인지 본다. 남의 것을 말없이 덮지 않으려는 것이다."""
     return isinstance(entry, dict) and RUNNER in str(entry.get("command", ""))
@@ -105,6 +149,10 @@ def main():
                     help=f"그림 크기. 있는 것 = {', '.join(SIZES)}")
     ap.add_argument("--scope", default="user", choices=("user", "project"),
                     help="user 는 ~/.claude, project 는 지금 폴더의 .claude")
+    ap.add_argument("--dir", metavar="폴더",
+                    help="project 스코프로 붙일 워크스페이스. 비우면 지금 폴더")
+    ap.add_argument("--where", action="store_true",
+                    help="지금 어디에 붙어 있는지 찾아 보여 준다")
     ap.add_argument("--uninstall", action="store_true", help="statusLine 을 뗀다")
     ap.add_argument("--force", action="store_true", help="다른 statusLine 이 있어도 덮는다")
     ap.add_argument("--dry-run", action="store_true", help="쓰지 않고 보여만 준다")
@@ -115,7 +163,19 @@ def main():
     if not SIZES:
         sys.exit("스프라이트가 없다. plmi/sprites/anim 을 확인할 것")
 
-    path = settings_path(a.scope)
+    if a.where:
+        found = installed_at()
+        for where, cmd in found:
+            print(where)
+            print(f"  {cmd}")
+        if not found:
+            print("붙어 있는 곳이 없다")
+        return 0
+    if a.dir and a.scope != "project":
+        sys.exit("--dir 은 --scope project 와 함께 쓴다")
+    if a.dir and not os.path.isdir(os.path.expanduser(a.dir)):
+        sys.exit(f"그런 폴더가 없다: {a.dir}")
+    path = settings_path(a.scope, a.dir)
     data = load(path)
     now = data.get("statusLine")
 

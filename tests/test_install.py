@@ -149,3 +149,53 @@ def test_버전을_말할_수_있다():
     said = out.stdout.strip()
     with open(os.path.join(grid.ROOT, "VERSION"), encoding="utf-8") as f:
         assert said == f.read().strip(), f"--version 이 {said}"
+
+def bare(*args, cwd=None, env=None):
+    """--scope 를 붙이지 않고 그대로 부른다."""
+    return subprocess.run([sys.executable, INSTALL, *args], cwd=cwd or grid.ROOT,
+                          capture_output=True, text=True, timeout=60,
+                          env=dict(os.environ, **(env or {})))
+
+
+def test_붙일_워크스페이스를_지목할_수_있다():
+    """지목할 길이 없으면 워크스페이스마다 그 폴더로 옮겨 가야 한다.
+
+    부른 자리가 아니라 지목한 자리에 붙는지를 본다. 그래서 둘을 갈라 둔다.
+    """
+    with tempfile.TemporaryDirectory() as here, tempfile.TemporaryDirectory() as there:
+        out = bare("--scope", "project", "--dir", there, cwd=here)
+        assert out.returncode == 0, out.stderr
+        assert settings(there)["statusLine"]["type"] == "command"
+        assert settings(here) is None, "부른 자리에 썼다"
+        assert bare("--scope", "project", "--dir", there,
+                    "--uninstall", cwd=here).returncode == 0
+        assert "statusLine" not in settings(there)
+
+
+def test_지목한_폴더가_없으면_멈춘다():
+    out = bare("--scope", "project", "--dir", "/없는/폴더")
+    assert out.returncode != 0
+    assert "없다" in out.stderr + out.stdout
+
+
+def test_user_스코프에_폴더를_주면_멈춘다():
+    """홈에 붙이는데 폴더를 받으면 어디에 쓸지 두 말이 된다."""
+    with tempfile.TemporaryDirectory() as d:
+        out = bare("--scope", "user", "--dir", d)
+        assert out.returncode != 0
+        assert settings(d) is None
+
+
+def test_붙인_자리를_찾아_준다():
+    """떼려면 어디에 붙였는지 알아야 한다. 사람이 기억하고 있을 일이 아니다."""
+    with tempfile.TemporaryDirectory() as home:
+        work = os.path.join(home, "work", "myproj")
+        os.makedirs(work)
+        assert bare("--scope", "project", "--dir", work).returncode == 0
+        out = bare("--where", env={"HOME": home})
+        assert out.returncode == 0, out.stderr
+        assert work in out.stdout, out.stdout
+        assert "PLMI_SIZE" in out.stdout
+
+        out = bare("--where", env={"HOME": os.path.join(home, "빈곳")})
+        assert "붙어 있는 곳이 없다" in out.stdout

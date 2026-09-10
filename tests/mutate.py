@@ -153,6 +153,15 @@ def main():
           "test_install", "test_기본_크기가_실제로_있는_크기다",
           "기본 크기를 옛 줄 수로 박음", out)
 
+    guard([INSTALL], swap(INSTALL, "    root = os.path.abspath(os.path.expanduser(where or os.getcwd()))",
+                          "    root = os.getcwd()"),
+          "test_install", "test_붙일_워크스페이스를_지목할_수_있다",
+          "지목한 폴더를 무시하고 지금 폴더에 씀", out)
+    guard([INSTALL], swap(INSTALL, 'return "PLMI_SIZE" in cmd and "statusline.py" in cmd',
+                          "return False"),
+          "test_install", "test_붙인_자리를_찾아_준다",
+          "붙은 자리를 못 알아보게", out)
+
     missed = [label for label, hit in out if not hit]
     print(f"\n망가뜨린 {len(out)}가지 중 {len(out) - len(missed)}가지를 잡았다")
     if missed:
