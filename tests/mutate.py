@@ -162,6 +162,20 @@ def main():
           "test_install", "test_붙인_자리를_찾아_준다",
           "붙은 자리를 못 알아보게", out)
 
+    guard([STATUS], swap(STATUS, "SIZE = os.environ.get(\"PLMI_SIZE\") or default_size()",
+                         "SIZE = os.environ.get(\"PLMI_SIZE\", \"26x10\")"),
+          "test_runtime", "test_기본_크기는_구워_둔_것에서_고른다",
+          "런타임 기본 크기를 글자로 박음", out)
+    guard([STATUS], swap(STATUS, '"[Request interrupted by user]" in str(b.get("text", ""))',
+                         "False"),
+          "test_runtime", "test_여덟_상태가_모두_기록에서_나온다",
+          "놀람 트리거 제거", out)
+    guard([INSTALL], swap(INSTALL, "            sweep(path)", "            pass"),
+          "test_install", "test_붙였다_뗀다", "뗀 뒤 빈 껍데기를 남김", out)
+    guard([INSTALL], swap(INSTALL, "    if not a.uninstall and not fits(a.size) and not a.force:",
+                          "    if False:"),
+          "test_install", "test_창보다_큰_크기는_막는다", "창보다 큰 크기를 통과시킴", out)
+
     missed = [label for label, hit in out if not hit]
     print(f"\n망가뜨린 {len(out)}가지 중 {len(out) - len(missed)}가지를 잡았다")
     if missed:

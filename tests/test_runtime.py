@@ -1,8 +1,11 @@
 """실행 쪽이 지켜야 하는 것들. 받는 사람 컴퓨터에서 그냥 돌아야 한다."""
+import ast
+import datetime
 import json
 import os
 import subprocess
 import sys
+import tempfile
 
 import grid
 
@@ -31,12 +34,24 @@ def test_런타임은_표준_라이브러리만_쓴다():
 
 
 def test_굽는_쪽은_런타임을_안_끌어온다():
-    """statusline 이 anim 이나 dot 을 부르면 numpy 가 딸려 온다."""
+    """statusline 이 anim 이나 dot 을 부르면 numpy 가 딸려 온다.
+
+    글자로 찾으면 다른 파이썬에 넘길 문자열까지 걸린다(install.py 가 굽기 전에 numpy 가
+    깔렸는지 물어보는 자리). 실제 import 구문만 본다.
+    """
+    banned = {"anim", "dot", "numpy", "PIL"}
     for name in RUNTIME:
-        src = open(os.path.join(PLMI, name), encoding="utf-8").read()
-        for bad in ("import anim", "import dot", "from anim", "from dot",
-                    "import numpy", "from PIL"):
-            assert bad not in src, f"{name} 이 {bad} 를 한다"
+        with open(os.path.join(PLMI, name), encoding="utf-8") as f:
+            tree = ast.parse(f.read())
+        for node in ast.walk(tree):
+            if isinstance(node, ast.Import):
+                got = {a.name.split(".")[0] for a in node.names}
+            elif isinstance(node, ast.ImportFrom):
+                got = {(node.module or "").split(".")[0]}
+            else:
+                continue
+            hit = got & banned
+            assert not hit, f"{name} 이 {sorted(hit)} 를 임포트한다"
 
 
 def test_모든_크기가_이름대로_줄을_낸다():
@@ -75,3 +90,77 @@ def test_배경색은_쓰지_않는다():
     """브라유 점이 칸을 다 채우지 않아 배경을 주면 칸 전체가 물든다. DECISIONS 참고."""
     for size in grid.sizes():
         assert "\x1b[48;2;" not in run(size), f"{size} 에 배경색 escape 가 있다"
+
+def _transcript(path, entries):
+    with open(path, "w", encoding="utf-8") as f:
+        for e in entries:
+            f.write(json.dumps(e, ensure_ascii=False) + "\n")
+
+
+def _say(role, kind, text="", ago=0.0):
+    when = (datetime.datetime.now(datetime.timezone.utc)
+            - datetime.timedelta(seconds=ago)).isoformat()
+    block = {"type": kind}
+    if kind == "text":
+        block["text"] = text
+    return {"type": role, "timestamp": when,
+            "message": {"role": role, "content": [block]}}
+
+
+def _tool(ago=0.0):
+    when = (datetime.datetime.now(datetime.timezone.utc)
+            - datetime.timedelta(seconds=ago)).isoformat()
+    return {"type": "assistant", "timestamp": when,
+            "message": {"role": "assistant", "content": [
+                {"type": "tool_use", "name": "Read", "input": {"file_path": "/a"}}]}}
+
+
+def test_여덟_상태가_모두_기록에서_나온다():
+    """구워 두고 아무 기록으로도 안 나오는 상태가 있으면 그 그림은 죽은 것이다."""
+    sys.path.insert(0, PLMI)
+    import statusline
+
+    cases = {
+        "완료": [_say("assistant", "text", "다 했어", ago=1)],
+        "숨쉬기": [_say("assistant", "text", "다 했어", ago=60)],
+        "뾰로통": [_say("assistant", "text", "다 했어", ago=statusline.SULK + 60)],
+        "놀람": [_say("user", "text", "[Request interrupted by user]", ago=1)],
+        "생각중": [_say("user", "text", "이거 해줘", ago=1)],
+        "작업중": [_tool(ago=0)],
+        "승인대기": [_tool(ago=statusline.FRESH + 10)],
+        "오류": [_tool(ago=0),
+               {"type": "user", "timestamp": _say("user", "text")["timestamp"],
+                "message": {"role": "user", "content": [
+                    {"type": "tool_result", "is_error": True, "content": "안 됨"}]}}],
+    }
+    with tempfile.TemporaryDirectory() as d:
+        for want, entries in cases.items():
+            path = os.path.join(d, "t.jsonl")
+            _transcript(path, entries)
+            got, _ = statusline.state_of(path)
+            assert got == want, f"{want} 를 기대했는데 {got}"
+
+
+def test_굽지_않은_크기를_불러도_안_죽는다():
+    for bad in ("99x99", "abc", ""):
+        env = dict(os.environ, PLMI_SIZE=bad)
+        out = subprocess.run([sys.executable, os.path.join(PLMI, "statusline.py")],
+                             input=json.dumps({"transcript_path": "/없음"}),
+                             capture_output=True, text=True, env=env, timeout=30)
+        assert out.returncode == 0, f"{bad!r} 에서 종료 {out.returncode}"
+        assert out.stdout.strip(), f"{bad!r} 에서 아무것도 안 나왔다"
+
+
+def test_기본_크기는_구워_둔_것에서_고른다():
+    """글자로 박아 두면 굽는 줄 수가 바뀔 때마다 없는 크기가 된다.
+
+    함수만 보면 안 된다. 실제로 쓰이는 것은 모듈이 읽어 둔 SIZE 라, PLMI_SIZE 를 지운
+    자리에서 그 값을 물어야 한다.
+    """
+    env = {k: v for k, v in os.environ.items() if k != "PLMI_SIZE"}
+    code = (f"import sys; sys.path.insert(0, {PLMI!r})\n"
+            "import statusline; print(statusline.SIZE)")
+    out = subprocess.run([sys.executable, "-c", code],
+                         capture_output=True, text=True, env=env, timeout=30)
+    assert out.returncode == 0, out.stderr
+    assert out.stdout.strip() in grid.sizes(), out.stdout.strip()

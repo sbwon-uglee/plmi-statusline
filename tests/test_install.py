@@ -33,7 +33,8 @@ def test_붙였다_뗀다():
         assert s["statusLine"]["refreshInterval"] == 1
 
         assert run(d, "--uninstall").returncode == 0
-        assert "statusLine" not in settings(d)
+        # 우리가 만든 파일이면 뗄 때 같이 치운다. 빈 {} 가 워크스페이스마다 남지 않게
+        assert settings(d) is None, "빈 껍데기가 남았다"
 
 
 def test_다른_설정을_남긴다():
@@ -169,7 +170,7 @@ def test_붙일_워크스페이스를_지목할_수_있다():
         assert settings(here) is None, "부른 자리에 썼다"
         assert bare("--scope", "project", "--dir", there,
                     "--uninstall", cwd=here).returncode == 0
-        assert "statusLine" not in settings(there)
+        assert settings(there) is None, "빈 껍데기가 남았다"
 
 
 def test_지목한_폴더가_없으면_멈춘다():
@@ -199,3 +200,31 @@ def test_붙인_자리를_찾아_준다():
 
         out = bare("--where", env={"HOME": os.path.join(home, "빈곳")})
         assert "붙어 있는 곳이 없다" in out.stdout
+
+def test_남의_설정이_있으면_파일을_안_지운다():
+    """치우는 것은 우리가 만든 빈 껍데기뿐이다."""
+    with tempfile.TemporaryDirectory() as d:
+        os.makedirs(os.path.join(d, ".claude"))
+        with open(os.path.join(d, ".claude", "settings.json"), "w", encoding="utf-8") as f:
+            json.dump({"permissions": {"allow": ["Bash(ls:*)"]}}, f)
+        run(d)
+        run(d, "--uninstall")
+        assert settings(d) == {"permissions": {"allow": ["Bash(ls:*)"]}}
+
+
+def test_창보다_큰_크기는_막는다():
+    """창보다 넓으면 줄바꿈으로 그림이 무너진다."""
+    with tempfile.TemporaryDirectory() as d:
+        big = max(grid.sizes(), key=lambda s: int(s.split("x")[0]))
+        out = subprocess.run([sys.executable, INSTALL, "--scope", "project",
+                              "--dir", d, "--size", big],
+                             capture_output=True, text=True, timeout=60,
+                             env=dict(os.environ, COLUMNS="30", LINES="10"))
+        assert out.returncode != 0, "좁은 창인데 통과했다"
+        assert settings(d) is None
+        # --force 면 사람이 알고 하는 것이라 통과시킨다
+        out = subprocess.run([sys.executable, INSTALL, "--scope", "project",
+                              "--dir", d, "--size", big, "--force"],
+                             capture_output=True, text=True, timeout=60,
+                             env=dict(os.environ, COLUMNS="30", LINES="10"))
+        assert out.returncode == 0, out.stderr

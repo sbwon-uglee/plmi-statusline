@@ -19,6 +19,7 @@ import json
 import os
 import re
 import shutil
+import subprocess
 import sys
 
 CELLAR = re.compile(r"(?P<prefix>.*)/Cellar/(?P<name>[^/]+)/[^/]+/(?P<rest>.*)")
@@ -44,8 +45,11 @@ def stable(path):
 
 HERE = os.path.dirname(stable(__file__))
 RUNNER = os.path.join(HERE, "statusline.py")
+# 손수 구운 크기를 두는 자리. brew 로 깐 자리는 읽기 전용이고 판을 올릴 때 갈린다
+BAKED = os.path.join(os.path.expanduser("~"), ".claude", "plmi-sizes")
 SIZES = sorted({os.path.basename(f).rsplit("_", 1)[1][:-5]
-                for f in glob.glob(os.path.join(HERE, "sprites", "anim", "*.json"))},
+                for d in (BAKED, os.path.join(HERE, "sprites", "anim"))
+                for f in glob.glob(os.path.join(d, "플밍이_*_*.json"))},
                key=lambda s: -int(s.split("x")[0]))
 # 줄 수는 굽고 나서 정해지므로 기본 크기를 글자로 박아 두면 그때마다 없는 크기가 된다.
 # 26칸에 가장 가까운 것을 고른다
@@ -58,6 +62,43 @@ def version():
             return f.read().strip()
     except OSError:
         return "0.0.0"
+
+
+def bake(cols):
+    """그 칸 수로 스프라이트를 구워 홈 아래에 둔다.
+
+    줄 수는 굽고 나서 정해지므로 칸 수만 받는다. 굽는 쪽은 numpy 와 pillow 가 필요해서
+    상태줄 쪽과 갈라 두었다. `uv` 가 있으면 그때만 받아 쓰고, 없으면 이미 깔린 것을 쓴다.
+    """
+    anim = os.path.join(HERE, "anim.py")
+    art = os.path.join(os.path.dirname(HERE), "assets")
+    if not os.path.exists(anim) or not os.path.isdir(art):
+        sys.exit("굽는 데 필요한 파일이 없다. 저장소를 클론해 쓰거나 새 판으로 올려라")
+    if shutil.which("uv"):
+        cmd = ["uv", "run", "--quiet", "--with", "numpy", "--with", "pillow",
+               "python", anim]
+    else:
+        probe = subprocess.run(["python3", "-c", "import numpy, PIL"],
+                               capture_output=True)
+        if probe.returncode != 0:
+            sys.exit("numpy 와 pillow 가 필요하다. uv 를 깔거나 pip install numpy pillow")
+        cmd = ["python3", anim]
+    out = subprocess.run(cmd + ["--cols", str(cols), "--out", BAKED])
+    if out.returncode != 0:
+        sys.exit("굽다가 멈췄다")
+    made = sorted(glob.glob(os.path.join(BAKED, f"플밍이_*_{cols}x*.json")))
+    if not made:
+        sys.exit("구워진 것이 없다")
+    size = os.path.basename(made[0]).rsplit("_", 1)[1][:-5]
+    print(f"구웠다. {size} 로 붙이려면 plmi --size {size}")
+    return 0
+
+
+def fits(size):
+    """지금 창에 들어가는 크기인지. 창보다 넓으면 줄바꿈으로 그림이 무너진다."""
+    cols, rows = shutil.get_terminal_size((80, 24))
+    w, h = (int(x) for x in size.split("x"))
+    return w <= cols and h < rows
 
 
 def settings_path(scope, where=None):
@@ -105,6 +146,29 @@ def load(path):
     return json.loads(text) if text else {}
 
 
+def sweep(path):
+    """뗀 뒤에 남는 것을 치운다.
+
+    우리 말고는 아무것도 안 든 settings.json 은 우리가 만든 것이다. 남겨 두면 빈 `{}`
+    파일이 워크스페이스마다 쌓인다. 백업도 붙어 있는 동안 되돌리려고 둔 것이라 뗄 때
+    같이 치운다.
+    """
+    gone = []
+    # 백업을 먼저 치운다. 뒤에 두면 폴더가 안 비어 그대로 남는다
+    for backup in glob.glob(f"{path}.bak_*_plmi"):
+        os.remove(backup)
+        gone.append(backup)
+    if os.path.exists(path) and not load(path):
+        os.remove(path)
+        gone.append(path)
+        room = os.path.dirname(path)
+        if os.path.isdir(room) and not os.listdir(room):
+            os.rmdir(room)
+            gone.append(room)
+    for g in gone:
+        print(f"  치움 {g}")
+
+
 def save(path, data):
     """쓰기 전에 백업한다. 사람이 손으로 만든 설정이 들어 있는 파일이다."""
     os.makedirs(os.path.dirname(path), exist_ok=True)
@@ -149,6 +213,8 @@ def main():
                     help=f"그림 크기. 있는 것 = {', '.join(SIZES)}")
     ap.add_argument("--scope", default="user", choices=("user", "project"),
                     help="user 는 ~/.claude, project 는 지금 폴더의 .claude")
+    ap.add_argument("--bake", metavar="칸수", type=int,
+                    help="그 칸 수로 스프라이트를 구워 둔다. 줄 수는 굽고 나서 정해진다")
     ap.add_argument("--dir", metavar="폴더",
                     help="project 스코프로 붙일 워크스페이스. 비우면 지금 폴더")
     ap.add_argument("--where", action="store_true",
@@ -163,6 +229,10 @@ def main():
     if not SIZES:
         sys.exit("스프라이트가 없다. plmi/sprites/anim 을 확인할 것")
 
+    if a.bake:
+        if a.bake < 8:
+            sys.exit("칸이 너무 좁다. 8칸 이상")
+        return bake(a.bake)
     if a.where:
         found = installed_at()
         for where, cmd in found:
@@ -175,6 +245,11 @@ def main():
         sys.exit("--dir 은 --scope project 와 함께 쓴다")
     if a.dir and not os.path.isdir(os.path.expanduser(a.dir)):
         sys.exit(f"그런 폴더가 없다: {a.dir}")
+    if not a.uninstall and not fits(a.size) and not a.force:
+        cols, rows = shutil.get_terminal_size((80, 24))
+        sys.exit(f"{a.size} 는 지금 창({cols}x{rows})보다 크다. 줄바꿈으로 그림이 무너진다.\n"
+                 f"들어가는 크기 = {', '.join(s for s in SIZES if fits(s)) or '없다'}\n"
+                 "그래도 붙이려면 --force")
     path = settings_path(a.scope, a.dir)
     data = load(path)
     now = data.get("statusLine")
@@ -189,6 +264,7 @@ def main():
         print(f"뗀다: {path}")
         if not a.dry_run:
             save(path, data)
+            sweep(path)
         return
 
     if now and not mine(now) and not a.force:

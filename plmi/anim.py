@@ -135,6 +135,11 @@ def main():
         CH = int(sys.argv[sys.argv.index("--rows") + 1])
     if "--cols" in sys.argv:
         CW = int(sys.argv[sys.argv.index("--cols") + 1])
+    global OUT
+    if "--out" in sys.argv:
+        # brew 로 깐 자리는 읽기 전용이고 판을 올리면 통째로 갈린다. 손수 굽는 것은
+        # 홈 아래 쓸 수 있는 자리로 낸다
+        OUT = os.path.abspath(os.path.expanduser(sys.argv[sys.argv.index("--out") + 1]))
     os.makedirs(OUT, exist_ok=True)
     M = {k: masks(os.path.join(SRC, v)) for k, v in FACES.items()}
     cache = {}

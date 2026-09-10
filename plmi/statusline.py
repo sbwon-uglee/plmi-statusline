@@ -21,20 +21,42 @@ sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 from summary import summarize
 
 HERE = os.path.dirname(os.path.abspath(__file__))
+# 손수 구운 크기를 먼저 본다. brew 로 깐 자리는 판을 올릴 때 통째로 갈리므로 거기에
+# 두면 사라진다. 홈 아래에 두면 살아남고, 같은 이름이면 손수 구운 것이 이긴다
+BAKED = os.path.join(os.path.expanduser("~"), ".claude", "plmi-sizes")
 ANIM = os.path.join(HERE, "sprites", "anim")
+DIRS = [BAKED, ANIM]
 TAIL = 32768
 FRESH = 4.0                    # 이보다 오래된 마지막 사건은 「방금 일어난 일」로 안 본다
+SULK = 900.0                   # 이만큼 아무 일이 없으면 뾰로통해진다
 _cache = {}
 
 
-SIZE = os.environ.get("PLMI_SIZE", "26x10")
+def sizes():
+    """구워 둔 크기. 파일에서 읽으므로 굽는 크기를 늘리면 저절로 늘어난다."""
+    out = set()
+    for d in DIRS:
+        for f in glob.glob(os.path.join(d, "플밍이_*_*.json")):
+            out.add(os.path.basename(f).rsplit("_", 1)[1][:-5])
+    return sorted(out, key=lambda s: -int(s.split("x")[0]))
+
+
+def default_size():
+    """26칸에 가장 가까운 것. 글자로 박아 두면 굽는 줄 수가 바뀔 때마다 없는 크기가 된다."""
+    have = sizes()
+    return min(have, key=lambda s: abs(int(s.split("x")[0]) - 26)) if have else ""
+
+
+SIZE = os.environ.get("PLMI_SIZE") or default_size()
 
 
 def load(name):
     """크기를 골라 읽는다. 여러 크기를 구워 두고 `PLMI_SIZE` 로 갈아 낀다."""
     if name not in _cache:
-        hit = (glob.glob(os.path.join(ANIM, f"플밍이_{name}_{SIZE}.json"))
-               or glob.glob(os.path.join(ANIM, f"플밍이_{name}_*.json")))
+        hit = ([p for d in DIRS
+                for p in glob.glob(os.path.join(d, f"플밍이_{name}_{SIZE}.json"))]
+               or [p for d in DIRS
+                   for p in glob.glob(os.path.join(d, f"플밍이_{name}_*.json"))])
         _cache[name] = json.load(open(hit[0], encoding="utf-8")) if hit else None
     return _cache[name]
 
@@ -91,7 +113,12 @@ def state_of(path):
                 return "생각중", "생각하는 중"
             if kind == "text":
                 if e.get("type") == "assistant":
-                    return ("완료", "끝") if age(e) < FRESH else ("숨쉬기", "")
+                    if age(e) < FRESH:
+                        return "완료", "끝"
+                    return ("뾰로통", "") if age(e) > SULK else ("숨쉬기", "")
+                # 하던 일을 사람이 끊었을 때. Claude Code 가 이 문구를 넣는다
+                if "[Request interrupted by user]" in str(b.get("text", "")):
+                    return "놀람", "앗"
                 return "생각중", "무슨 일인지 보는 중"
     return "숨쉬기", ""
 
