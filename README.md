@@ -33,6 +33,8 @@ python3 ~/.claude/plmi/plmi/install.py
 ```bash
 plmi --size 36x16             크게
 plmi --scope project          지금 폴더의 .claude 에만
+plmi --scope project --dir ~/work/foo   그 워크스페이스에
+plmi --where                  지금 어디에 붙어 있나
 plmi --uninstall              뗀다
 plmi --dry-run                쓸 내용만 본다
 ```
