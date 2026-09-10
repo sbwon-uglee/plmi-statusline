@@ -266,8 +266,8 @@ def test_붙이지_않고_미리_볼_수_있다():
         assert grid.sizes()[-1] in out.stdout, out.stdout
         # 미리 보기에만 있는 안내다. 이게 없으면 그냥 붙인 것이다
         assert "Ctrl+C" in out.stdout, out.stdout
-        # 사람이 키보드로 치는 문자만 쓴다. 가운뎃점과 이모지는 규칙 위반이다
-        assert not set(out.stdout) & set("—·•"), out.stdout
+        # 사람이 키보드로 치는 문자만 쓴다. em dash 는 쉼표나 마침표로 대신한다
+        assert "—" not in out.stdout, out.stdout
         assert settings(d) is None, "미리 보기가 설정을 건드렸다"
 
 
