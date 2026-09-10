@@ -1,6 +1,7 @@
 """설치기가 남의 설정을 망가뜨리지 않는지."""
 import json
 import os
+import re
 import shutil
 import subprocess
 import sys
@@ -14,6 +15,17 @@ INSTALL = os.path.join(grid.ROOT, "plmi", "install.py")
 def run(cwd, *args):
     return subprocess.run([sys.executable, INSTALL, "--scope", "project", *args],
                           cwd=cwd, capture_output=True, text=True, timeout=60)
+
+
+def runner(cmd):
+    """설정에 적힌 명령에서 statusline.py 경로만 뽑는다.
+
+    명령은 셸로 감싸여 있다(stderr 를 버리려고). 공백으로 잘라 마지막을 집으면
+    리디렉션이 잡힌다.
+    """
+    hit = re.search(r"\S+statusline\.py", cmd)
+    assert hit, cmd
+    return hit.group(0)
 
 
 def settings(cwd):
@@ -91,7 +103,7 @@ def test_절대경로를_쓴다():
     with tempfile.TemporaryDirectory() as d:
         run(d)
         cmd = settings(d)["statusLine"]["command"]
-        path = cmd.split()[-1]
+        path = runner(cmd)
         assert os.path.isabs(path), cmd
         assert os.path.exists(path), path
 
@@ -127,7 +139,7 @@ def test_brew_로_깔면_버전_없는_경로를_쓴다():
         assert "/Cellar/" not in cmd, cmd
         assert os.path.join(d, "opt", "plmi") in cmd, cmd
         assert "0.1.0" not in cmd, f"경로에 버전이 박혔다: {cmd}"
-        assert os.path.exists(cmd.split()[-1]), cmd
+        assert os.path.exists(runner(cmd)), cmd
 
 def test_기본_크기가_실제로_있는_크기다():
     """줄 수는 굽고 나서 정해진다. 기본값을 글자로 박아 두면 그때마다 없는 크기가 된다."""
@@ -228,3 +240,31 @@ def test_창보다_큰_크기는_막는다():
                              capture_output=True, text=True, timeout=60,
                              env=dict(os.environ, COLUMNS="30", LINES="10"))
         assert out.returncode == 0, out.stderr
+
+def test_붙이지_않고_미리_볼_수_있다():
+    """전에는 붙이고 Claude Code 를 다시 띄워야 처음 봤다. 크기 고르는 왕복이 있었다."""
+    with tempfile.TemporaryDirectory() as d:
+        out = bare("--preview", "0.2", "--size", grid.sizes()[-1],
+                   "--scope", "project", "--dir", d, cwd=d)
+        assert out.returncode == 0, out.stderr
+        assert grid.sizes()[-1] in out.stdout, out.stdout
+        # 미리 보기에만 있는 안내다. 이게 없으면 그냥 붙인 것이다
+        assert "Ctrl+C" in out.stdout, out.stdout
+        assert settings(d) is None, "미리 보기가 설정을 건드렸다"
+
+
+def test_떼는_순서를_안_지켜도_조용하다():
+    """plmi --uninstall 없이 brew uninstall 을 하면 경로가 사라진다.
+
+    Formula 에는 제거 훅이 없어(uninstall_preflight 는 Cask 전용) 순서를 강제할 수 없다.
+    그때 파이썬이 뱉는 「No such file」이 상태줄 자리에 찍히면 안 된다.
+    """
+    with tempfile.TemporaryDirectory() as d:
+        run(d)
+        cmd = settings(d)["statusLine"]["command"]
+        gone = cmd.replace(runner(cmd), os.path.join(d, "없어진", "statusline.py"))
+        out = subprocess.run(gone, shell=True, input="{}",
+                             capture_output=True, text=True, timeout=30)
+        assert out.stdout.strip() == "", f"찍힌 것: {out.stdout[:80]!r}"
+        # 감싸지 않으면 파이썬이 stderr 로 「No such file」을 뱉는다
+        assert out.stderr.strip() == "", f"stderr: {out.stderr[:80]!r}"

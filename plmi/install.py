@@ -21,6 +21,7 @@ import re
 import shutil
 import subprocess
 import sys
+import time
 
 CELLAR = re.compile(r"(?P<prefix>.*)/Cellar/(?P<name>[^/]+)/[^/]+/(?P<rest>.*)")
 
@@ -91,6 +92,35 @@ def bake(cols):
         sys.exit("구워진 것이 없다")
     size = os.path.basename(made[0]).rsplit("_", 1)[1][:-5]
     print(f"구웠다. {size} 로 붙이려면 plmi --size {size}")
+    return 0
+
+
+def preview(size, secs, state):
+    """붙이기 전에 그 크기로 몇 초 돌려 보여 준다.
+
+    전에는 붙이고 Claude Code 를 다시 띄워야 처음 봤다. 크기가 마음에 안 들면 붙이고,
+    다시 띄우고, 다시 붙이는 왕복을 해야 했다.
+
+    상태줄을 그리는 그 코드를 그대로 부른다. 따로 그리면 실제와 다른 것을 보여 주게 된다.
+    """
+    os.environ["PLMI_SIZE"] = size
+    sys.path.insert(0, HERE)
+    import statusline
+
+    art = statusline.panel(state, "", when=0.0)
+    rows = len(art.split("\n"))
+    print(f"{size} · {state} · {secs:g}초 · Ctrl+C 로 끝")
+    print("\n" * rows, end="")
+    end = time.time() + secs
+    try:
+        while time.time() < end:
+            art = statusline.panel(state, "")
+            sys.stdout.write(f"\x1b[{rows}A"
+                             + art.replace("\n", "\x1b[K\n") + "\x1b[K\n")
+            sys.stdout.flush()
+            time.sleep(0.08)
+    except KeyboardInterrupt:
+        pass
     return 0
 
 
@@ -185,8 +215,15 @@ def save(path, data):
 def command(size):
     """PATH 의 python3 를 쓴다. sys.executable 을 박으면 그때 그 파이썬을 지우거나
     버전을 올렸을 때 statusLine 이 조용히 죽는다. 런타임은 표준 라이브러리만 쓰므로
-    어느 python3 에서나 돈다."""
-    return f"PLMI_SIZE={size} python3 {RUNNER}"
+    어느 python3 에서나 돈다.
+
+    🔴셸로 감싸 stderr 를 버린다. `plmi --uninstall` 없이 `brew uninstall plmi` 를 하면
+    이 경로가 사라지는데, 그때 파이썬이 뱉는 「No such file」이 상태줄 자리에 그대로
+    찍힌다. 그 시점엔 `plmi` 명령도 없어서 떼지도 못한다. Formula 에는 제거 훅이 없어
+    (uninstall_preflight 는 Cask 전용) 순서를 강제할 방법이 없으므로, 순서를 안 지켜도
+    조용히 비어 있게 만든다.
+    """
+    return f"PLMI_SIZE={size} sh -c 'exec python3 {RUNNER} 2>/dev/null'"
 
 
 def any_plmi(entry):
@@ -213,6 +250,10 @@ def main():
                     help=f"그림 크기. 있는 것 = {', '.join(SIZES)}")
     ap.add_argument("--scope", default="user", choices=("user", "project"),
                     help="user 는 ~/.claude, project 는 지금 폴더의 .claude")
+    ap.add_argument("--preview", metavar="초", type=float, nargs="?", const=4.0,
+                    help="붙이지 않고 그 크기로 돌려 본다. 초를 주면 그만큼")
+    ap.add_argument("--state", default="숨쉬기",
+                    help="--preview 로 볼 상태. 기본은 숨쉬기")
     ap.add_argument("--bake", metavar="칸수", type=int,
                     help="그 칸 수로 스프라이트를 구워 둔다. 줄 수는 굽고 나서 정해진다")
     ap.add_argument("--dir", metavar="폴더",
@@ -229,6 +270,8 @@ def main():
     if not SIZES:
         sys.exit("스프라이트가 없다. plmi/sprites/anim 을 확인할 것")
 
+    if a.preview:
+        return preview(a.size, a.preview, a.state)
     if a.bake:
         if a.bake < 8:
             sys.exit("칸이 너무 좁다. 8칸 이상")

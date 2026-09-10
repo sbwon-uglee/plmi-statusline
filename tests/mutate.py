@@ -126,8 +126,9 @@ def main():
           "test_runtime", "test_굽는_쪽은_런타임을_안_끌어온다", "런타임에 numpy 임포트", out)
     guard([INSTALL], swap(INSTALL, "if now and not mine(now) and not a.force:", "if False:"),
           "test_install", "test_남의_statusLine_을_안_덮는다", "덮기 방지 제거", out)
-    guard([INSTALL], swap(INSTALL, 'return f"PLMI_SIZE={size} python3 {RUNNER}"',
-                          'return f"PLMI_SIZE={size} python3 plmi/statusline.py"'),
+    guard([INSTALL], swap(INSTALL,
+                      'exec python3 {RUNNER} 2>/dev/null',
+                      'exec python3 plmi/statusline.py 2>/dev/null'),
           "test_install", "test_절대경로를_쓴다", "상대경로로 바꿈", out)
 
     # 기하를 Layout 밖으로 도로 풀어 쓰는 것이 이 코드가 늘 되돌아가던 자리다
@@ -184,6 +185,15 @@ def main():
                          "    return []"),
           "test_runtime", "test_사람_말이_문자열로_와도_본다",
           "문자열 블록을 다시 무시", out)
+
+    guard([INSTALL], swap(INSTALL,
+                      'return f"PLMI_SIZE={size} sh -c \'exec python3 {RUNNER} 2>/dev/null\'"',
+                      'return f"PLMI_SIZE={size} python3 {RUNNER}"'),
+          "test_install", "test_떼는_순서를_안_지켜도_조용하다",
+          "감싸지 않고 바로 부름", out)
+    guard([INSTALL], swap(INSTALL, '    if a.preview:', '    if False:'),
+          "test_install", "test_붙이지_않고_미리_볼_수_있다",
+          "미리 보기를 끔", out)
 
     missed = [label for label, hit in out if not hit]
     print(f"\n망가뜨린 {len(out)}가지 중 {len(out) - len(missed)}가지를 잡았다")
