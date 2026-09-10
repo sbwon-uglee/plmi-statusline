@@ -195,6 +195,14 @@ def main():
           "test_install", "test_붙이지_않고_미리_볼_수_있다",
           "미리 보기를 끔", out)
 
+    guard([STATUS], swap(STATUS, 'return "뾰로통", "심심해"', 'return "뾰로통", ""'),
+          "test_runtime", "test_오래_쉬면_심심하다고_한다",
+          "심심해 문구 제거", out)
+    guard([INSTALL], swap(INSTALL, "        if not any_plmi(now) and not a.force:",
+                          "        if not mine(now) and not a.force:"),
+          "test_install", "test_어느_사본이_붙였든_뗀다",
+          "다른 사본이 붙인 것을 못 떼게", out)
+
     missed = [label for label, hit in out if not hit]
     print(f"\n망가뜨린 {len(out)}가지 중 {len(out) - len(missed)}가지를 잡았다")
     if missed:

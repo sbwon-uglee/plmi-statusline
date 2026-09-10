@@ -301,7 +301,9 @@ def main():
         if not now:
             print("붙어 있는 statusLine 이 없다")
             return
-        if not mine(now) and not a.force:
+        # 어느 사본이 붙였든 뗄 수 있어야 한다. mine 은 지금 이 파일이 낸 경로만
+        # 알아봐서, 저장소에서 쓰던 것이나 옛 판이 붙인 것을 남의 것으로 보고 거부했다.
+        if not any_plmi(now) and not a.force:
             sys.exit(f"플밍이가 아닌 statusLine 이 있다. 그대로 둔다\n  {now.get('command')}")
         data.pop("statusLine", None)
         print(f"뗀다: {path}")

@@ -164,10 +164,26 @@ def test_버전을_말할_수_있다():
         assert said == f.read().strip(), f"--version 이 {said}"
 
 def bare(*args, cwd=None, env=None):
-    """--scope 를 붙이지 않고 그대로 부른다."""
-    return subprocess.run([sys.executable, INSTALL, *args], cwd=cwd or grid.ROOT,
-                          capture_output=True, text=True, timeout=60,
-                          env=dict(os.environ, **(env or {})))
+    """--scope 를 붙이지 않고 그대로 부른다.
+
+    HOME 을 임시 폴더로 돌린다. user 스코프가 기본이라 어딘가에서 그리로 흘러가면
+    사람이 쓰는 홈의 settings.json 에 붙는다. 돌연변이는 소스를 되돌리지만 이렇게 남은
+    파일은 안 되돌린다. 실제로 홈에 16x8 짜리가 붙어 다른 세션이 작게 나온 적이 있다.
+    """
+    home = env.get("HOME") if env else None
+    room = None
+    if not home:
+        room = tempfile.mkdtemp()
+        home = room
+    try:
+        extra = dict(env or {})
+        extra["HOME"] = home
+        return subprocess.run([sys.executable, INSTALL, *args], cwd=cwd or grid.ROOT,
+                              capture_output=True, text=True, timeout=60,
+                              env=dict(os.environ, **extra))
+    finally:
+        if room:
+            shutil.rmtree(room, ignore_errors=True)
 
 
 def test_붙일_워크스페이스를_지목할_수_있다():
@@ -270,3 +286,18 @@ def test_떼는_순서를_안_지켜도_조용하다():
         assert out.stdout.strip() == "", f"찍힌 것: {out.stdout[:80]!r}"
         # 감싸지 않으면 파이썬이 stderr 로 「No such file」을 뱉는다
         assert out.stderr.strip() == "", f"stderr: {out.stderr[:80]!r}"
+
+def test_어느_사본이_붙였든_뗀다():
+    """저장소에서 쓰던 것이나 옛 판이 붙인 것도 뗄 수 있어야 한다.
+
+    mine 은 지금 이 파일이 낸 경로만 알아본다. 그것으로 거르면 홈에 남은 다른 사본의
+    설정을 --force 없이는 못 뗀다. 실제로 그래서 손으로 지워야 했다.
+    """
+    with tempfile.TemporaryDirectory() as d:
+        os.makedirs(os.path.join(d, ".claude"))
+        other = {"type": "command",
+                 "command": "PLMI_SIZE=16x8 python3 /어딘가/다른사본/statusline.py"}
+        with open(os.path.join(d, ".claude", "settings.json"), "w", encoding="utf-8") as f:
+            json.dump({"statusLine": other}, f, ensure_ascii=False)
+        assert run(d, "--uninstall").returncode == 0
+        assert settings(d) is None

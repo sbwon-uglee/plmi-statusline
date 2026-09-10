@@ -126,3 +126,15 @@ def test_아래에_빈_줄이_있다():
             for i, t in enumerate(a["tints"]):
                 last = t.split("\n")[-1]
                 assert set(last) == {"."}, f"{size} {state} {i}번 맨 아랫줄에 색이 있다"
+
+def test_뾰로통은_눈을_뜨고_있다():
+    """입만 시무룩하다. 눈까지 찌푸린 얼굴이 오래 띄워 둔 세션의 기본이 되면 안 된다.
+
+    파낸 눈 자리의 넓이로 본다. 찌푸린 눈은 뜬눈보다 좁다.
+    """
+    for size in grid.sizes():
+        rest = grid.Frame(grid.load("숨쉬기", size), 0)
+        sulk = grid.Frame(grid.load("뾰로통", size), 0)
+        eyes = lambda f: sum(1 for y, x in f.carved_dots()
+                             if y < max(yy for yy, _ in f.carved_dots()) - 1)
+        assert eyes(sulk) >= eyes(rest) * 0.7, f"{size} 눈이 너무 좁다"

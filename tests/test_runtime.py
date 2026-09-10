@@ -209,3 +209,16 @@ def test_사람_말이_문자열로_와도_본다():
                             "message": {"role": "user", "content": "이거 해줘"}}])
         got, _ = statusline.state_of(path)
         assert got == "생각중", got
+
+def test_오래_쉬면_심심하다고_한다():
+    """눈까지 찌푸리면 오래 띄워 둔 세션마다 화난 얼굴이 된다. 그건 안 쓴 것이지 언짢은 게 아니다."""
+    sys.path.insert(0, PLMI)
+    import statusline
+    with tempfile.TemporaryDirectory() as d:
+        path = os.path.join(d, "t.jsonl")
+        _transcript(path, [_say("assistant", "text", "다 했어",
+                                ago=statusline.SULK + 60)],
+                    ago=statusline.SULK + 60)
+        state, said = statusline.state_of(path)
+        assert state == "뾰로통", state
+        assert said == "심심해", said

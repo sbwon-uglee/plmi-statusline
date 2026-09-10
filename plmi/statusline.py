@@ -135,7 +135,7 @@ def state_of(path):
     # 처음 만난 text 블록의 나이로 정해서, 도구를 한참 돌리는 중에도 그 앞 답변이 오래됐으면
     # 일하는 중에 뾰로통이 떴다.
     if quiet(path, ev) > SULK:
-        return "뾰로통", ""
+        return "뾰로통", "심심해"
     tool = None
     for e in reversed(ev):
         for b in reversed(blocks(e)):
