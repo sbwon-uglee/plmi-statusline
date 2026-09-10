@@ -109,7 +109,7 @@ def preview(size, secs, state):
 
     art = statusline.panel(state, "", when=0.0)
     rows = len(art.split("\n"))
-    print(f"{size} · {state} · {secs:g}초 · Ctrl+C 로 끝")
+    print(f"{size}, {state}, {secs:g}초. Ctrl+C 로 끝")
     print("\n" * rows, end="")
     end = time.time() + secs
     try:
@@ -217,7 +217,7 @@ def command(size):
     버전을 올렸을 때 statusLine 이 조용히 죽는다. 런타임은 표준 라이브러리만 쓰므로
     어느 python3 에서나 돈다.
 
-    🔴셸로 감싸 stderr 를 버린다. `plmi --uninstall` 없이 `brew uninstall plmi` 를 하면
+    셸로 감싸 stderr 를 버린다. `plmi --uninstall` 없이 `brew uninstall plmi` 를 하면
     이 경로가 사라지는데, 그때 파이썬이 뱉는 「No such file」이 상태줄 자리에 그대로
     찍힌다. 그 시점엔 `plmi` 명령도 없어서 떼지도 못한다. Formula 에는 제거 훅이 없어
     (uninstall_preflight 는 Cask 전용) 순서를 강제할 방법이 없으므로, 순서를 안 지켜도
