@@ -6,6 +6,7 @@ import os
 import subprocess
 import sys
 import tempfile
+import time
 
 import grid
 
@@ -91,10 +92,18 @@ def test_배경색은_쓰지_않는다():
     for size in grid.sizes():
         assert "\x1b[48;2;" not in run(size), f"{size} 에 배경색 escape 가 있다"
 
-def _transcript(path, entries):
+def _transcript(path, entries, ago=0.0):
+    """ago 를 주면 파일이 그만큼 전에 마지막으로 자란 것처럼 만든다.
+
+    조용한지는 항목 시각뿐 아니라 파일이 자란 시각으로도 본다. 도구 결과 한 줄이 꼬리
+    창보다 커서 못 읽는 일이 있어, 못 읽은 것을 조용한 것으로 세면 안 되기 때문이다.
+    """
     with open(path, "w", encoding="utf-8") as f:
         for e in entries:
             f.write(json.dumps(e, ensure_ascii=False) + "\n")
+    if ago:
+        when = time.time() - ago
+        os.utime(path, (when, when))
 
 
 def _say(role, kind, text="", ago=0.0):
@@ -124,6 +133,7 @@ def test_여덟_상태가_모두_기록에서_나온다():
         "완료": [_say("assistant", "text", "다 했어", ago=1)],
         "숨쉬기": [_say("assistant", "text", "다 했어", ago=60)],
         "뾰로통": [_say("assistant", "text", "다 했어", ago=statusline.SULK + 60)],
+        # 아래에서 파일 시각도 같이 늙힌다
         "놀람": [_say("user", "text", "[Request interrupted by user]", ago=1)],
         "생각중": [_say("user", "text", "이거 해줘", ago=1)],
         "작업중": [_tool(ago=0)],
@@ -136,7 +146,8 @@ def test_여덟_상태가_모두_기록에서_나온다():
     with tempfile.TemporaryDirectory() as d:
         for want, entries in cases.items():
             path = os.path.join(d, "t.jsonl")
-            _transcript(path, entries)
+            _transcript(path, entries,
+                        ago=statusline.SULK + 60 if want == "뾰로통" else 0.0)
             got, _ = statusline.state_of(path)
             assert got == want, f"{want} 를 기대했는데 {got}"
 
@@ -164,3 +175,37 @@ def test_기본_크기는_구워_둔_것에서_고른다():
                          capture_output=True, text=True, env=env, timeout=30)
     assert out.returncode == 0, out.stderr
     assert out.stdout.strip() in grid.sizes(), out.stdout.strip()
+
+def test_큰_줄이_끝에_와도_판정할_것을_찾는다():
+    """도구 결과 한 줄이 꼬리 창보다 클 때가 있다(실측 66,684 대 32,768바이트).
+
+    그런 줄이 끝에 오면 고정 창에는 성한 줄이 거의 안 남아 판정이 아무것도 못 찾고
+    숨쉬기로 떨어진다. 일하는 중에 가만히 있는 얼굴이 나온다.
+    """
+    sys.path.insert(0, PLMI)
+    import statusline
+    with tempfile.TemporaryDirectory() as d:
+        path = os.path.join(d, "t.jsonl")
+        talk = [_say("assistant", "text", "무슨 말", ago=10) for _ in range(5)]
+        huge = {"type": "user", "timestamp": _say("user", "text")["timestamp"],
+                "message": {"role": "user", "content": [
+                    {"type": "tool_result", "content": "x" * (statusline.TAIL * 2)}]}}
+        _transcript(path, talk + [huge])
+        ev = statusline.tail(path)
+        usable = sum(len(statusline.blocks(e)) for e in ev)
+        assert usable >= statusline.NEED, f"쓸 블록이 {usable}개뿐이다"
+        got, _ = statusline.state_of(path)
+        assert got == "작업중", got
+
+
+def test_사람_말이_문자열로_와도_본다():
+    """content 가 list 가 아니라 문자열로 오는 항목이 있다. 통째로 안 보였다."""
+    sys.path.insert(0, PLMI)
+    import statusline
+    with tempfile.TemporaryDirectory() as d:
+        path = os.path.join(d, "t.jsonl")
+        when = datetime.datetime.now(datetime.timezone.utc).isoformat()
+        _transcript(path, [{"type": "user", "timestamp": when,
+                            "message": {"role": "user", "content": "이거 해줘"}}])
+        got, _ = statusline.state_of(path)
+        assert got == "생각중", got

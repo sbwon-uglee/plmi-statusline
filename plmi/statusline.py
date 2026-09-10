@@ -26,7 +26,9 @@ HERE = os.path.dirname(os.path.abspath(__file__))
 BAKED = os.path.join(os.path.expanduser("~"), ".claude", "plmi-sizes")
 ANIM = os.path.join(HERE, "sprites", "anim")
 DIRS = [BAKED, ANIM]
-TAIL = 32768
+TAIL = 32768                   # 처음 읽어 볼 꼬리 크기
+TAIL_MAX = 1 << 21             # 여기까지는 넓혀 가며 다시 읽는다
+NEED = 3                       # 판정에 쓸 블록이 이만큼 나올 때까지 넓힌다
 FRESH = 4.0                    # 이보다 오래된 마지막 사건은 「방금 일어난 일」로 안 본다
 SULK = 900.0                   # 이만큼 아무 일이 없으면 뾰로통해진다
 _cache = {}
@@ -61,11 +63,11 @@ def load(name):
     return _cache[name]
 
 
-def tail(path):
-    """끝에서부터 파싱되는 줄만 골라 시간순으로 돌려준다."""
+def read_tail(path, size):
     with open(path, "rb") as f:
         f.seek(0, os.SEEK_END)
-        f.seek(max(0, f.tell() - TAIL))
+        end = f.tell()
+        f.seek(max(0, end - size))
         raw = f.read().decode("utf-8", "ignore")
     out = []
     for line in raw.split("\n"):
@@ -73,7 +75,23 @@ def tail(path):
             out.append(json.loads(line))
         except Exception:
             pass
-    return out
+    return out, end
+
+
+def tail(path):
+    """끝에서부터 파싱되는 줄만 골라 시간순으로 돌려준다.
+
+    🔴꼬리 크기를 한 번만 잡으면 안 된다. 도구 결과 한 줄이 창보다 클 때가 있어서
+    (실측 66,684바이트 대 32,768바이트) 그런 줄이 끝에 오면 창에 성한 줄이 거의 안 남고,
+    판정이 아무것도 못 찾아 숨쉬기로 떨어진다. 일하는 중에 가만히 있는 얼굴이 나온다.
+    판정에 쓸 블록이 몇 개 나올 때까지 창을 넓혀 다시 읽는다.
+    """
+    size = TAIL
+    while True:
+        out, end = read_tail(path, size)
+        if sum(len(blocks(e)) for e in out) >= NEED or size >= TAIL_MAX or size >= end:
+            return out
+        size *= 4
 
 
 def age(entry):
@@ -88,13 +106,36 @@ def age(entry):
 
 
 def blocks(entry):
+    """그 항목이 담은 내용 블록. 사람 말은 문자열로 오기도 한다."""
     c = (entry.get("message") or {}).get("content")
-    return c if isinstance(c, list) else []
+    if isinstance(c, list):
+        return c
+    # 🔴문자열이면 통째로 안 보여 사람이 방금 말을 걸어도 생각중이 안 떴다
+    return [{"type": "text", "text": c}] if isinstance(c, str) and c else []
+
+
+def quiet(path, ev):
+    """마지막으로 무슨 일이든 일어난 지 얼마나 됐나.
+
+    항목 종류를 가리지 않고 본다. 도구 결과나 첨부처럼 판정에 안 쓰는 항목도 일이
+    일어났다는 증거다. 파일이 자란 시각도 함께 본다.
+    """
+    ages = [age(e) for e in ev if e.get("timestamp")]
+    try:
+        ages.append(time.time() - os.path.getmtime(path))
+    except OSError:
+        pass
+    return min(ages) if ages else 0.0
 
 
 def state_of(path):
     """(상태, 말풍선 문구). 트랜스크립트 끝을 거꾸로 훑어 마지막 사건을 찾는다."""
     ev = tail(path)
+    # 🔴뾰로통은 「조용하다」는 뜻이라 마지막 사건 전체로 판단한다. 전에는 거슬러 올라가
+    # 처음 만난 text 블록의 나이로 정해서, 도구를 한참 돌리는 중에도 그 앞 답변이 오래됐으면
+    # 일하는 중에 뾰로통이 떴다.
+    if quiet(path, ev) > SULK:
+        return "뾰로통", ""
     tool = None
     for e in reversed(ev):
         for b in reversed(blocks(e)):
@@ -113,9 +154,7 @@ def state_of(path):
                 return "생각중", "생각하는 중"
             if kind == "text":
                 if e.get("type") == "assistant":
-                    if age(e) < FRESH:
-                        return "완료", "끝"
-                    return ("뾰로통", "") if age(e) > SULK else ("숨쉬기", "")
+                    return ("완료", "끝") if age(e) < FRESH else ("숨쉬기", "")
                 # 하던 일을 사람이 끊었을 때. Claude Code 가 이 문구를 넣는다
                 if "[Request interrupted by user]" in str(b.get("text", "")):
                     return "놀람", "앗"

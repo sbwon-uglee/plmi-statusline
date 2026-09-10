@@ -176,6 +176,15 @@ def main():
                           "    if False:"),
           "test_install", "test_창보다_큰_크기는_막는다", "창보다 큰 크기를 통과시킴", out)
 
+    guard([STATUS], swap(STATUS, "        if sum(len(blocks(e)) for e in out) >= NEED or size >= TAIL_MAX or size >= end:",
+                         "        if True:"),
+          "test_runtime", "test_큰_줄이_끝에_와도_판정할_것을_찾는다",
+          "꼬리 창을 안 넓힘", out)
+    guard([STATUS], swap(STATUS, '    return [{"type": "text", "text": c}] if isinstance(c, str) and c else []',
+                         "    return []"),
+          "test_runtime", "test_사람_말이_문자열로_와도_본다",
+          "문자열 블록을 다시 무시", out)
+
     missed = [label for label, hit in out if not hit]
     print(f"\n망가뜨린 {len(out)}가지 중 {len(out) - len(missed)}가지를 잡았다")
     if missed:
