@@ -5,11 +5,11 @@
 #              plmi
 #
 # sha256 은 이렇게 구한다.
-#   curl -sL https://github.com/sbwon-uglee/plmi-statusline/archive/refs/tags/v0.2.1.tar.gz | shasum -a 256
+#   curl -sL https://github.com/sbwon-uglee/plmi-statusline/archive/refs/tags/v0.3.0.tar.gz | shasum -a 256
 class Plmi < Formula
   desc "Claude Code 상태줄에 사는 도트 캐릭터 플밍이"
   homepage "https://github.com/sbwon-uglee/plmi-statusline"
-  url "https://github.com/sbwon-uglee/plmi-statusline/archive/refs/tags/v0.2.1.tar.gz"
+  url "https://github.com/sbwon-uglee/plmi-statusline/archive/refs/tags/v0.3.0.tar.gz"
   sha256 "0000000000000000000000000000000000000000000000000000000000000000"
 
   # 파이썬은 의존으로 걸지 않는다. 상태줄을 그리는 쪽이 표준 라이브러리만 써서 맥에 이미
@@ -32,7 +32,8 @@ class Plmi < Formula
 
           plmi
 
-      크기를 고르려면 `plmi --size 36x16`, 떼려면 `plmi --uninstall` 입니다.
+      붙이기 전에 보려면 `plmi --preview` 입니다.
+      크기를 고르려면 `plmi --size 36x16`, 뗄 때는 `plmi --uninstall` 을 먼저 하세요.
       설정에는 #{opt_prefix} 아래 경로가 적히므로 판을 올려도 깨지지 않습니다.
     TEXT
   end

@@ -16,6 +16,8 @@ Claude Code 를 다시 띄우면 나온다. 필요한 것은 brew 와 python3 �
 기본으로 들어 있다.
 
 올릴 때는 `brew upgrade plmi`, 뗄 때는 `plmi --uninstall` 뒤에 `brew uninstall plmi`.
+순서를 바꿔도 상태줄이 조용히 비기만 하고 오류를 뱉지는 않는다. 다만 설정에 죽은
+경로가 남으므로 `plmi --uninstall` 을 먼저 하는 편이 깔끔하다.
 설정에 적히는 경로에는 버전이 안 들어가므로 판을 올려도 상태줄이 안 깨진다.
 
 ### brew 없이
@@ -35,6 +37,8 @@ plmi --size 36x16             크게
 plmi --scope project          지금 폴더의 .claude 에만
 plmi --scope project --dir ~/work/foo   그 워크스페이스에
 plmi --where                  지금 어디에 붙어 있나
+plmi --preview                붙이지 않고 4초 돌려 본다
+plmi --preview 10 --state 놀람  그 표정으로 10초
 plmi --uninstall              뗀다
 plmi --dry-run                쓸 내용만 본다
 ```
