@@ -1,0 +1,35 @@
+name: 검사
+
+# 검사가 사람이 기억할 때만 돌면 안 돌아간 채로 태그가 찍힌다.
+on:
+  push:
+    branches: [main, dev, "v*"]
+  pull_request:
+  workflow_dispatch:
+
+jobs:
+  test:
+    # 상태줄이 도는 자리가 맥이다. 굽는 것도 맥에서 재 둔 값에 맞춰져 있다
+    runs-on: macos-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: 검사
+        # 상태줄 쪽은 표준 라이브러리만 쓰므로 러너에 있는 python3 로 충분하다
+        run: python3 tests/run.py
+
+      - name: 검사가 실제로 잡는지
+        run: python3 tests/mutate.py
+
+  bake:
+    # 소스만 고치고 굽지 않으면 받는 사람에게는 안 바뀐 채로 간다
+    runs-on: macos-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: astral-sh/setup-uv@v5
+
+      - name: 다시 구워 저장소와 같은지
+        run: |
+          ./build.sh
+          git diff --exit-code --stat plmi/sprites/anim \
+            || { echo "구운 결과가 저장소와 다르다. ./build.sh 를 돌리고 커밋할 것" >&2; exit 1; }
