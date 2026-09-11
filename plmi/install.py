@@ -18,6 +18,7 @@ import glob
 import json
 import os
 import re
+import shlex
 import shutil
 import subprocess
 import sys
@@ -222,7 +223,9 @@ def command(size):
     (uninstall_preflight 는 Cask 전용) 순서를 강제할 방법이 없으므로, 순서를 안 지켜도
     조용히 비어 있게 만든다.
     """
-    return f"PLMI_SIZE={size} sh -c 'exec python3 {RUNNER} 2>/dev/null'"
+    # 경로는 sh -c 의 인자($0)로 따로 넘기고 셸 규칙대로 감싼다. 문자열 안에 그대로 넣으면
+    # 공백이 든 경로(「내 폴더」)가 둘로 잘리고, stderr 를 버리니 아무 표시 없이 비어 버린다.
+    return f"PLMI_SIZE={size} sh -c 'exec python3 \"$0\" 2>/dev/null' {shlex.quote(RUNNER)}"
 
 
 def any_plmi(entry):

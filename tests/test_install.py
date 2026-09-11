@@ -2,6 +2,7 @@
 import json
 import os
 import re
+import shlex
 import shutil
 import subprocess
 import sys
@@ -20,12 +21,13 @@ def run(cwd, *args):
 def runner(cmd):
     """설정에 적힌 명령에서 statusline.py 경로만 뽑는다.
 
-    명령은 셸로 감싸여 있다(stderr 를 버리려고). 공백으로 잘라 마지막을 집으면
-    리디렉션이 잡힌다.
+    명령은 셸로 감싸여 있고 경로는 셸 규칙대로 따옴표가 붙을 수 있다. 셸이 읽는 대로
+    쪼개야 공백이 든 경로도 한 덩어리로 나온다.
     """
-    hit = re.search(r"\S+statusline\.py", cmd)
-    assert hit, cmd
-    return hit.group(0)
+    for word in shlex.split(cmd):
+        if word.endswith("statusline.py"):
+            return word
+    raise AssertionError(cmd)
 
 
 def settings(cwd):
@@ -280,7 +282,8 @@ def test_떼는_순서를_안_지켜도_조용하다():
     with tempfile.TemporaryDirectory() as d:
         run(d)
         cmd = settings(d)["statusLine"]["command"]
-        gone = cmd.replace(runner(cmd), os.path.join(d, "없어진", "statusline.py"))
+        gone = cmd.replace(shlex.quote(runner(cmd)),
+                           shlex.quote(os.path.join(d, "없어진", "statusline.py")))
         out = subprocess.run(gone, shell=True, input="{}",
                              capture_output=True, text=True, timeout=30)
         assert out.stdout.strip() == "", f"찍힌 것: {out.stdout[:80]!r}"
@@ -317,3 +320,23 @@ def test_다른_사본이_붙인_자리에_그냥_붙는다():
         out = run(d)
         assert out.returncode == 0, out.stderr
         assert "다른사본" not in settings(d)["statusLine"]["command"]
+
+
+def test_공백이_든_경로에서도_돈다():
+    """클론은 아무 데나 받는다. 「내 폴더」 처럼 공백이 든 자리에 받으면 명령 안에서 경로가
+    둘로 잘렸고, stderr 를 버리니 아무 표시 없이 비어 버렸다."""
+    with tempfile.TemporaryDirectory() as base, tempfile.TemporaryDirectory() as d:
+        room = os.path.join(base, "내 폴더")
+        shutil.copytree(os.path.join(grid.ROOT, "plmi"), os.path.join(room, "plmi"))
+        out = subprocess.run([sys.executable, os.path.join(room, "plmi", "install.py"),
+                              "--scope", "project", "--dir", d],
+                             capture_output=True, text=True, timeout=60)
+        assert out.returncode == 0, out.stderr
+        cmd = settings(d)["statusLine"]["command"]
+        # 맥의 /var 는 /private/var 를 가리키는 링크라 실제 경로로 견준다
+        assert (os.path.realpath(runner(cmd))
+                == os.path.realpath(os.path.join(room, "plmi", "statusline.py"))), cmd
+        shown = subprocess.run(cmd, shell=True, input="{}",
+                               capture_output=True, text=True, timeout=30)
+        rows = int(cmd.split("PLMI_SIZE=")[1].split()[0].split("x")[1])
+        assert len(shown.stdout.rstrip("\n").split("\n")) == rows, f"{shown.stdout[:60]!r}"
