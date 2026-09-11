@@ -22,6 +22,7 @@ SAMPLE = sorted(glob.glob(os.path.join(ANIM, "플밍이_숨쉬기_36x*.json")))[
 INSTALL = os.path.join(ROOT, "plmi", "install.py")
 STATUS = os.path.join(ROOT, "plmi", "statusline.py")
 DOT = os.path.join(ROOT, "plmi", "dot.py")
+BUBBLE = os.path.join(ROOT, "plmi", "bubble.py")
 
 
 def fires(mod, case):
@@ -199,6 +200,39 @@ def main():
     guard([STATUS], swap(STATUS, 'return "뾰로통", "심심해"', 'return "뾰로통", ""'),
           "test_runtime", "test_오래_쉬면_심심하다고_한다",
           "심심해 문구 제거", out)
+
+    guard([STATUS], swap(STATUS, "        return int(at / step) + 1", "        return size"),
+          "test_runtime", "test_말풍선은_한_글자씩_나온다",
+          "말풍선이 한꺼번에 뜸", out)
+    guard([BUBBLE], swap(BUBBLE, "    body = wrap(text, cols)",
+                         "    body = wrap(text if shown is None else text[:shown], cols)"),
+          "test_runtime", "test_말하는_동안_상자_크기가_그대로다",
+          "보이는 글자로 상자를 잼", out)
+    guard([STATUS], swap(STATUS, "                full = said + DOTS[-1]",
+                         "                full = said + DOTS[int(t * 2) % len(DOTS)]"),
+          "test_runtime", "test_말하는_동안_상자_크기가_그대로다",
+          "도는 점이 상자를 흔듦", out)
+    guard([STATUS], swap(STATUS, "TALK = (3.0, 3.0, 3.0)", "TALK = (3.0, 3.0, 0.0)"),
+          "test_runtime", "test_수다는_쉬었다가_다시_말한다",
+          "수다가 쉬지 않음", out)
+    guard([STATUS], swap(STATUS, "            at = max(0.0, t - since)", "            at = t"),
+          "test_runtime", "test_일이_난_순간부터_말한다",
+          "사건 시각 대신 벽시계", out)
+    guard([STATUS], swap(STATUS, "    if rest is not None:\n        at %= typing + hold + rest",
+                         "    at %= typing + hold + (rest or 0.0)"),
+          "test_runtime", "test_외치는_말은_한_번만_한다",
+          "외치는 말을 되풀이", out)
+    guard([STATUS], swap(STATUS, '    "작업중": (1.2, 9.0, 0.0),', '    "작업중": (1.2, 9.0, 3.0),'),
+          "test_runtime", "test_일하는_중에는_말풍선이_안_사라진다",
+          "일하는 중에 쉼", out)
+    guard([STATUS], swap(STATUS, "            at, rest = t, TALK[2] if rest is None else rest",
+                         "            at = t"),
+          "test_runtime", "test_언제_꺼낸_말인지_몰라도_보인다",
+          "시각을 모르면 한 번만 할 말이 안 보임", out)
+    guard([STATUS], swap(STATUS, '                    return "놀람", "앗", at',
+                         '                    return "놀람", "앗", None'),
+          "test_runtime", "test_말을_꺼낸_시각을_기록에서_읽는다",
+          "사건 시각을 안 넘김", out)
     guard([INSTALL], swap(INSTALL, "        if not any_plmi(now) and not a.force:",
                           '        if RUNNER not in str(now.get("command", "")) and not a.force:'),
           "test_install", "test_어느_사본이_붙였든_뗀다",

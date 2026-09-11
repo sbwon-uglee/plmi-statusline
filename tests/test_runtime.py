@@ -3,6 +3,7 @@ import ast
 import datetime
 import json
 import os
+import re
 import subprocess
 import sys
 import tempfile
@@ -148,7 +149,7 @@ def test_여덟_상태가_모두_기록에서_나온다():
             path = os.path.join(d, "t.jsonl")
             _transcript(path, entries,
                         ago=statusline.SULK + 60 if want == "뾰로통" else 0.0)
-            got, _ = statusline.state_of(path)
+            got = statusline.state_of(path)[0]
             assert got == want, f"{want} 를 기대했는데 {got}"
 
 
@@ -194,7 +195,7 @@ def test_큰_줄이_끝에_와도_판정할_것을_찾는다():
         ev = statusline.tail(path)
         usable = sum(len(statusline.blocks(e)) for e in ev)
         assert usable >= statusline.NEED, f"쓸 블록이 {usable}개뿐이다"
-        got, _ = statusline.state_of(path)
+        got = statusline.state_of(path)[0]
         assert got == "작업중", got
 
 
@@ -207,7 +208,7 @@ def test_사람_말이_문자열로_와도_본다():
         when = datetime.datetime.now(datetime.timezone.utc).isoformat()
         _transcript(path, [{"type": "user", "timestamp": when,
                             "message": {"role": "user", "content": "이거 해줘"}}])
-        got, _ = statusline.state_of(path)
+        got = statusline.state_of(path)[0]
         assert got == "생각중", got
 
 def test_오래_쉬면_심심하다고_한다():
@@ -219,6 +220,122 @@ def test_오래_쉬면_심심하다고_한다():
         _transcript(path, [_say("assistant", "text", "다 했어",
                                 ago=statusline.SULK + 60)],
                     ago=statusline.SULK + 60)
-        state, said = statusline.state_of(path)
+        state, said, _ = statusline.state_of(path)
         assert state == "뾰로통", state
         assert said == "심심해", said
+
+
+ESC = re.compile(r"\x1b\[[0-9;]*m")
+BOX = set("╭╮╰╯─│◀")
+
+
+def _speech(name, text, at, since=1000.0):
+    """말을 꺼낸 지 at 초 뒤의 (말풍선에 보이는 글자, 줄마다 칸 수).
+
+    말풍선이 없으면 글자 자리가 None 이다. since 가 None 이면 at 을 벽시계로 쓴다.
+    """
+    sys.path.insert(0, PLMI)
+    import statusline
+    from bubble import cells
+    keep, statusline.BUBBLE = statusline.BUBBLE, True
+    try:
+        art = statusline.panel(name, text, when=at if since is None else since + at,
+                               since=since)
+    finally:
+        statusline.BUBBLE = keep
+    lines = ESC.sub("", art).split("\n")
+    if not any(c in BOX for l in lines for c in l):
+        return None, [cells(l) for l in lines]
+    words = "".join(c for l in lines for c in l
+                    if not 0x2800 <= ord(c) <= 0x28FF and c not in BOX and not c.isspace())
+    return words, [cells(l) for l in lines]
+
+
+def _said(name, text, span, since=1000.0, step=0.05):
+    """말을 꺼낸 뒤 span 초 동안 말풍선 글자가 바뀐 차례. 말풍선이 없던 구간은 None."""
+    seq = []
+    for k in range(int(span / step)):
+        w = _speech(name, text, k * step, since)[0]
+        if not seq or seq[-1] != w:
+            seq.append(w)
+    return seq
+
+
+LONG = "파일 여러 개를 한꺼번에 읽어 오는 중"
+
+
+def test_말풍선은_한_글자씩_나온다():
+    """한 번 떠서 그대로 있으면 그림 옆에 붙은 딱지로 보인다. 말하듯 앞에서부터 나와야 한다."""
+    got = _said("뾰로통", "심심해", 6)
+    assert got[:3] == ["심", "심심", "심심해"], got
+
+
+def test_말하는_동안_상자_크기가_그대로다():
+    """보이는 글자로 상자를 재면 글자가 나올 때마다 상자가 커지고, 줄 바꿈 자리를 넘으면
+    줄 수까지 바뀐다. 일하는 중 문구 뒤에서 도는 점도 상자를 흔들면 안 된다."""
+    for name, text in (("뾰로통", "심심해"), ("오류", "안 됐어"), ("작업중", LONG)):
+        shapes = set()
+        for k in range(300):
+            words, widths = _speech(name, text, k * 0.05)
+            if words is not None:
+                shapes.add(tuple(widths))
+        assert len(shapes) == 1, f"{name}: 상자 모양이 {len(shapes)}가지"
+
+
+def test_수다는_쉬었다가_다시_말한다():
+    got = _said("뾰로통", "심심해", 20)
+    assert None in got, f"쉬는 틈이 없다: {got}"
+    after = got[got.index(None):]
+    assert "심" in after, f"쉰 뒤에 다시 말하지 않는다: {got}"
+
+
+def test_일이_난_순간부터_말한다():
+    """벽시계로 박자를 맞추면 쉬는 구간에 걸린 반응은 몇 초 늦게 나온다.
+    사람이 끊었는데 놀란 얼굴만 하고 말이 없다."""
+    for since in (1000.0, 1004.5, 1007.25):
+        for name, text, first in (("뾰로통", "심심해", "심"), ("놀람", "앗", "앗"),
+                                  ("작업중", LONG, "파")):
+            got = _speech(name, text, 0.0, since)[0]
+            assert got == first, f"{name} 을 꺼낸 순간 {got!r}"
+
+
+def test_외치는_말은_한_번만_한다():
+    """놀람은 사람이 다음 말을 걸 때까지 이어진다. 되풀이하면 그동안 계속 앗 앗 한다."""
+    assert _speech("놀람", "앗", 0.0)[0] == "앗"
+    for at in (10.0, 60.0, 600.0):
+        assert _speech("놀람", "앗", at)[0] is None, f"{at}초 뒤에도 앗"
+
+
+def test_일하는_중에는_말풍선이_안_사라진다():
+    """지금 무슨 일인지 알려 주는 문구다. 쉬는 틈에 보면 무슨 일을 하는지 모른다."""
+    for name in ("작업중", "생각중", "승인대기"):
+        for k in range(300):
+            assert _speech(name, LONG, k * 0.1)[0] is not None, f"{name} {k * 0.1:.1f}초"
+
+
+def test_언제_꺼낸_말인지_몰라도_보인다():
+    """손으로 지정한 상태에는 사건 시각이 없다. 한 번만 할 말이 영영 안 보이면 안 된다.
+
+    벽시계는 0 근처가 아니다. 0 부터 재면 첫 몇 초에 한 번 말한 것이 보여 통과해 버린다.
+    """
+    now = 1.7e9
+    seen = [_speech(name, text, now + t, since=None)[0]
+            for name, text in (("놀람", "앗"), ("완료", "끝")) for t in range(30)]
+    assert any(w is not None for w in seen)
+
+
+def test_말을_꺼낸_시각을_기록에서_읽는다():
+    sys.path.insert(0, PLMI)
+    import statusline
+    with tempfile.TemporaryDirectory() as d:
+        path = os.path.join(d, "t.jsonl")
+        _transcript(path, [_say("user", "text", "[Request interrupted by user]", ago=5)])
+        name, _, since = statusline.state_of(path)
+        assert name == "놀람", name
+        assert since is not None and abs(time.time() - 5 - since) < 1, since
+        _transcript(path, [_say("assistant", "text", "다 했어", ago=statusline.SULK + 60)],
+                    ago=statusline.SULK + 60)
+        name, _, since = statusline.state_of(path)
+        assert name == "뾰로통", name
+        # 조용해진 지 SULK 만큼 지난 순간, 곧 60초 전에 심심해졌다
+        assert since is not None and abs(time.time() - 60 - since) < 1, since
