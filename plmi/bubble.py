@@ -33,11 +33,22 @@ def wrap(text, cols):
     return out or [""]
 
 
-def draw(text, cols=20, tail=1):
-    """말풍선을 그린다. tail 은 꼬리를 낼 줄 번호(0부터)다."""
+def draw(text, cols=20, tail=1, shown=None):
+    """말풍선을 그린다. tail 은 꼬리를 낼 줄 번호(0부터)다.
+
+    shown 을 주면 앞에서부터 그 글자 수만 보이고 나머지 자리는 비워 둔다. 상자 크기와
+    줄 바꿈은 text 전체로 먼저 정한다. 보이는 글자로 정하면 한 글자씩 나올 때마다 상자가
+    커지고, 줄 바꿈 자리를 넘는 순간 줄 수까지 바뀌어 그림이 밀린다.
+    """
     body = wrap(text, cols)
     tail = min(tail, len(body) - 1)          # 한 줄짜리 문구면 꼬리가 사라진다
     inner = max(cells(l) for l in body)
+    if shown is not None:
+        left, seen = shown, []
+        for l in body:
+            seen.append(l[:max(0, left)])
+            left -= len(l) + 1                # 줄 사이 공백 한 칸도 센다
+        body = seen
     top = "╭" + "─" * (inner + 2) + "╮"
     bot = "╰" + "─" * (inner + 2) + "╯"
     rows = [top]

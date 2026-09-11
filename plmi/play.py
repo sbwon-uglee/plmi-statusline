@@ -37,7 +37,11 @@ def live(secs=None, fps=12):
             if now - checked > 5:
                 path, checked = newest_transcript(), now
             try:
-                out = panel(*state_of(path), cycle=None) if path else panel(cycle=None)
+                if path:
+                    name, text, since = state_of(path)
+                    out = panel(name, text, cycle=None, since=since)
+                else:
+                    out = panel(cycle=None)
             except Exception:
                 out = panel(cycle=None)
             n = out.count("\n") + 1

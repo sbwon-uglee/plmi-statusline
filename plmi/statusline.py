@@ -15,7 +15,7 @@ import os
 import select
 import sys
 import time
-from datetime import datetime, timezone
+from datetime import datetime
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 from summary import summarize
@@ -94,15 +94,20 @@ def tail(path):
         size *= 4
 
 
-def age(entry):
+def stamp(entry):
+    """항목이 쓰인 시각(초). 없거나 못 읽으면 None."""
     ts = entry.get("timestamp")
     if not ts:
-        return 0.0
+        return None
     try:
-        t = datetime.fromisoformat(ts.replace("Z", "+00:00"))
-        return (datetime.now(timezone.utc) - t).total_seconds()
+        return datetime.fromisoformat(ts.replace("Z", "+00:00")).timestamp()
     except Exception:
-        return 0.0
+        return None
+
+
+def age(entry):
+    at = stamp(entry)
+    return time.time() - at if at is not None else 0.0
 
 
 def blocks(entry):
@@ -129,15 +134,21 @@ def quiet(path, ev):
 
 
 def state_of(path):
-    """(상태, 말풍선 문구). 트랜스크립트 끝을 거꾸로 훑어 마지막 사건을 찾는다."""
+    """(상태, 말풍선 문구, 그 일이 일어난 시각). 트랜스크립트 끝을 거꾸로 훑어 마지막 사건을 찾는다.
+
+    시각은 말풍선이 말을 꺼내는 기준이다. 일이 난 그 순간부터 한 글자씩 말한다.
+    """
     ev = tail(path)
     # 뾰로통은 「조용하다」는 뜻이라 마지막 사건 전체로 판단한다. 거슬러 올라가 처음 만난
     # text 블록의 나이로 정하면, 도구를 한참 돌리는 중에도 그 앞 답변이 오래됐을 때 일하는
     # 중에 뾰로통이 뜬다.
-    if quiet(path, ev) > SULK:
-        return "뾰로통", "심심해"
+    q = quiet(path, ev)
+    if q > SULK:
+        # 조용해진 지 SULK 만큼 지난 순간이 심심해진 순간이다
+        return "뾰로통", "심심해", time.time() - q + SULK
     tool = None
     for e in reversed(ev):
+        at = stamp(e)
         for b in reversed(blocks(e)):
             kind = b.get("type")
             if kind == "tool_use":
@@ -145,21 +156,21 @@ def state_of(path):
                     tool = (b.get("name", ""), b.get("input") or {})
                 # 결과가 아직 안 붙었고 시간이 꽤 지났으면 허락을 기다리는 중이다
                 waited = age(e) > FRESH
-                return ("승인대기" if waited else "작업중"), summarize(*tool)
+                return ("승인대기" if waited else "작업중"), summarize(*tool), at
             if kind == "tool_result":
                 if b.get("is_error"):
-                    return "오류", "안 됐어"
-                return "작업중", summarize(*tool) if tool else "다음 거 보는 중"
+                    return "오류", "안 됐어", at
+                return "작업중", summarize(*tool) if tool else "다음 거 보는 중", at
             if kind == "thinking":
-                return "생각중", "생각하는 중"
+                return "생각중", "생각하는 중", at
             if kind == "text":
                 if e.get("type") == "assistant":
-                    return ("완료", "끝") if age(e) < FRESH else ("숨쉬기", "")
+                    return ("완료", "끝", at) if age(e) < FRESH else ("숨쉬기", "", at)
                 # 하던 일을 사람이 끊었을 때. Claude Code 가 이 문구를 넣는다
                 if "[Request interrupted by user]" in str(b.get("text", "")):
-                    return "놀람", "앗"
-                return "생각중", "무슨 일인지 보는 중"
-    return "숨쉬기", ""
+                    return "놀람", "앗", at
+                return "생각중", "무슨 일인지 보는 중", at
+    return "숨쉬기", "", None
 
 
 def read_state():
@@ -177,7 +188,7 @@ def read_state():
         except Exception:
             pass
     from state import read
-    return read()
+    return (*read(), None)
 
 
 def frame(name=None, when=None, fps=None):
@@ -200,6 +211,36 @@ def frame(name=None, when=None, fps=None):
 
 DOTS = ["", ".", "..", "..."]
 BUSY = ("작업중", "생각중", "승인대기")
+
+# 말하는 박자. 말풍선이 한 번 떠서 그대로 있으면 그림 옆에 붙은 딱지로 보인다.
+# 일이 난 순간부터 한 글자씩 나오고, 머물고, 쉬었다가 다시 말한다.
+# (다 말하는 데 드는 초, 다 말하고 머무는 초, 쉬는 초). 쉬는 초가 None 이면 한 번 말하고 그친다.
+# 짧은 말은 글자당 1초보다 빨리 나오지 않는다.
+TALK = (3.0, 3.0, 3.0)
+RHYTHM = {
+    # 지금 무슨 일인지 알려 주는 정보라 빨리 말하고 오래 머물며 쉬지 않는다
+    "작업중": (1.2, 9.0, 0.0),
+    "생각중": (1.2, 9.0, 0.0),
+    "승인대기": (1.2, 9.0, 0.0),
+    # 한 번 외치는 말이다. 되풀이하면 끊긴 뒤 다음 말을 걸 때까지 계속 앗 앗 한다
+    "놀람": (1.0, 3.0, None),
+    # 4초만 떠 있는 상태라 쉬는 구간에 걸리면 못 보고 지나간다
+    "완료": (1.0, 3.0, None),
+}
+
+
+def speak(size, at, rhythm=TALK):
+    """말을 꺼낸 지 at 초 지났을 때 몇 글자를 보여 줄지. 말풍선이 없는 구간이면 None."""
+    say, hold, rest = rhythm
+    step = min(1.0, max(0.1, say / max(1, size)))
+    typing = step * size
+    if rest is not None:
+        at %= typing + hold + rest
+    if at < typing:
+        return int(at / step) + 1
+    if at < typing + hold:
+        return size
+    return None
 # 한 바퀴에 걸리는 초. 프레임 수가 달라도 속도를 맞춘다. 쉴 때는 초당 한 번만 그려지므로
 # 1초에 16%씩 돈다. 이웃 자세로만 넘어가야 숨쉬는 것으로 보이고, 크게 건너뛰면 튀어 보인다.
 # 3.0 이나 4.0 처럼 프레임 수와 딱 나누어떨어지는 값은 피한다. 같은 자세 서너 개만 반복한다.
@@ -240,12 +281,16 @@ def tinted(lines, tint, palette, cw, back=None):
     return out
 
 
-def panel(name=None, text="", when=None, cycle=CYCLE):
+def panel(name=None, text="", when=None, cycle=CYCLE, since=None):
     """그림과 말풍선을 한 장으로 만든다. 일하는 중이면 문구 뒤에 점을 붙여 돌린다.
 
     프레임 속도 대신 한 바퀴 도는 시간을 맞춘다. statusline 은 쉴 때 `refreshInterval`
     한계인 초당 한 번만 불리므로, 한 바퀴가 짧아야 그 한 번에 자세가 크게 바뀐다.
     48장짜리를 8fps 로 돌리면 한 번에 6분의 1바퀴라 멈춘 것으로 보인다.
+
+    since 는 그 말을 꺼낸 시각이다. 말풍선이 몇 글자까지 나왔는지를 여기서 지난 초로
+    정한다. statusline 은 부를 때마다 새로 뜨는 프로세스라 앞에서 몇 글자를 보였는지
+    기억할 수 없고, 사건 시각은 대화 기록에 있어 어느 프로세스에서 봐도 같다.
     """
     from bubble import beside, draw
     t = when if when is not None else time.time()
@@ -260,9 +305,22 @@ def panel(name=None, text="", when=None, cycle=CYCLE):
     i = int(t * rate) % n
     art = a["frames"][i]
     if BUBBLE and text:
-        if name in BUSY:
-            text = text.rstrip() + DOTS[int(t * 2) % len(DOTS)]
-        art = beside(art, draw(text, cols=22))
+        said = text.rstrip()
+        say, hold, rest = RHYTHM.get(name, TALK)
+        if since is None:
+            # 언제 꺼낸 말인지 모르면 벽시계로 맞춘다. 한 번만 할 말도 되풀이해야 보인다
+            at, rest = t, TALK[2] if rest is None else rest
+        else:
+            at = max(0.0, t - since)
+        shown = speak(len(said), at, (say, hold, rest))
+        if shown is not None:
+            full = said
+            if name in BUSY:
+                # 점은 다 말한 뒤에만 돌린다. 상자는 점 세 개 자리까지 미리 잡는다
+                full = said + DOTS[-1]
+                if shown == len(said):
+                    shown += len(DOTS[int(t * 2) % len(DOTS)])
+            art = beside(art, draw(full, cols=22, shown=shown))
     if COLOR and a.get("tints"):
         art = "\n".join(tinted(art.split("\n"), a["tints"][i], a["palette"], a["cw"],
                                 (a.get("backs") or [None] * n)[i]))
@@ -286,6 +344,7 @@ if __name__ == "__main__":
         emit(panel(sys.argv[1], sys.argv[2] if len(sys.argv) > 2 else ""))
     else:
         try:
-            emit(panel(*read_state()))
+            name, text, since = read_state()
+            emit(panel(name, text, since=since))
         except Exception:
             emit(frame("숨쉬기"))
