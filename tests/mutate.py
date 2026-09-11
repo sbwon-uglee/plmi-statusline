@@ -124,7 +124,7 @@ def main():
           "test_파일이름의_줄수와_실제_줄수가_같다", "한 줄 없앰", out)
     guard([STATUS], swap(STATUS, "import glob", "import glob\nimport numpy"),
           "test_runtime", "test_굽는_쪽은_런타임을_안_끌어온다", "런타임에 numpy 임포트", out)
-    guard([INSTALL], swap(INSTALL, "if now and not mine(now) and not a.force:", "if False:"),
+    guard([INSTALL], swap(INSTALL, "if now and not any_plmi(now) and not a.force:", "if False:"),
           "test_install", "test_남의_statusLine_을_안_덮는다", "덮기 방지 제거", out)
     guard([INSTALL], swap(INSTALL,
                       'exec python3 {RUNNER} 2>/dev/null',
@@ -199,9 +199,24 @@ def main():
           "test_runtime", "test_오래_쉬면_심심하다고_한다",
           "심심해 문구 제거", out)
     guard([INSTALL], swap(INSTALL, "        if not any_plmi(now) and not a.force:",
-                          "        if not mine(now) and not a.force:"),
+                          '        if RUNNER not in str(now.get("command", "")) and not a.force:'),
           "test_install", "test_어느_사본이_붙였든_뗀다",
           "다른 사본이 붙인 것을 못 떼게", out)
+
+    guard([INSTALL], swap(INSTALL, "    if now and not any_plmi(now) and not a.force:",
+                          '    if now and RUNNER not in str(now.get("command", "")) and not a.force:'),
+          "test_install", "test_다른_사본이_붙인_자리에_그냥_붙는다",
+          "다른 사본 자리에 붙이려면 --force 가 필요하게", out)
+
+    # 넣을 문자는 코드 번호로 만든다. 글자 그대로 적으면 이 파일이 글쓰기 검사에 걸린다
+    mark = "HERE = os.path.dirname(os.path.abspath(__file__))"
+    guard([STATUS], swap(STATUS, mark, mark + "  # " + chr(0x1F534) + " 표시"),
+          "test_writing", "test_이모지를_안_쓴다", "주석에 이모지", out)
+    guard([STATUS], swap(STATUS, mark, mark + "  # 하나" + chr(0x2014) + "둘"),
+          "test_writing", "test_em_dash_를_안_쓴다", "주석에 em dash", out)
+    guard([STATUS], swap(STATUS, mark, mark + "  # "
+                         + "".join(map(chr, (0xC804, 0xC5D0, 0xB294))) + " 달랐다"),
+          "test_writing", "test_코드에_변경_이력을_안_적는다", "주석에 이력 어투", out)
 
     missed = [label for label, hit in out if not hit]
     print(f"\n망가뜨린 {len(out)}가지 중 {len(out) - len(missed)}가지를 잡았다")
