@@ -62,6 +62,12 @@ def fill_bottom(a):
                    for f in a["frames"]]
 
 
+def cmd_line():
+    """install.py 에서 상태줄 명령을 만드는 줄. 명령 모양이 바뀌어도 돌연변이가 따라간다."""
+    with open(INSTALL, encoding="utf-8") as f:
+        return next(l.rstrip("\n") for l in f if l.startswith('    return f"PLMI_SIZE='))
+
+
 def swap(src, old, new):
     def go():
         with open(src, encoding="utf-8") as f:
@@ -127,8 +133,8 @@ def main():
     guard([INSTALL], swap(INSTALL, "if now and not any_plmi(now) and not a.force:", "if False:"),
           "test_install", "test_남의_statusLine_을_안_덮는다", "덮기 방지 제거", out)
     guard([INSTALL], swap(INSTALL,
-                      'exec python3 {RUNNER} 2>/dev/null',
-                      'exec python3 plmi/statusline.py 2>/dev/null'),
+                      '{shlex.quote(RUNNER)}',
+                      'plmi/statusline.py'),
           "test_install", "test_절대경로를_쓴다", "상대경로로 바꿈", out)
 
     # 기하를 Layout 밖으로 도로 풀어 쓰는 것이 이 코드가 늘 되돌아가던 자리다
@@ -186,11 +192,6 @@ def main():
           "test_runtime", "test_사람_말이_문자열로_와도_본다",
           "문자열 블록을 다시 무시", out)
 
-    guard([INSTALL], swap(INSTALL,
-                      'return f"PLMI_SIZE={size} sh -c \'exec python3 {RUNNER} 2>/dev/null\'"',
-                      'return f"PLMI_SIZE={size} python3 {RUNNER}"'),
-          "test_install", "test_떼는_순서를_안_지켜도_조용하다",
-          "감싸지 않고 바로 부름", out)
     guard([INSTALL], swap(INSTALL, '    if a.preview:', '    if False:'),
           "test_install", "test_붙이지_않고_미리_볼_수_있다",
           "미리 보기를 끔", out)
@@ -217,6 +218,17 @@ def main():
     guard([STATUS], swap(STATUS, mark, mark + "  # "
                          + "".join(map(chr, (0xC804, 0xC5D0, 0xB294))) + " 달랐다"),
           "test_writing", "test_코드에_변경_이력을_안_적는다", "주석에 이력 어투", out)
+
+
+    guard([INSTALL], swap(INSTALL, cmd_line(),
+                          '    return f"PLMI_SIZE={size} python3 {shlex.quote(RUNNER)}"'),
+          "test_install", "test_떼는_순서를_안_지켜도_조용하다",
+          "감싸지 않고 바로 부름", out)
+    guard([INSTALL], swap(INSTALL, cmd_line(),
+                          '    return f"PLMI_SIZE={size} sh -c '
+                          + "'exec python3 {RUNNER} 2>/dev/null'" + '"'),
+          "test_install", "test_공백이_든_경로에서도_돈다",
+          "경로를 명령 안에 그대로 넣음", out)
 
     missed = [label for label, hit in out if not hit]
     print(f"\n망가뜨린 {len(out)}가지 중 {len(out) - len(missed)}가지를 잡았다")
