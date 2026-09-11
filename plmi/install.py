@@ -98,8 +98,7 @@ def bake(cols):
 def preview(size, secs, state):
     """붙이기 전에 그 크기로 몇 초 돌려 보여 준다.
 
-    전에는 붙이고 Claude Code 를 다시 띄워야 처음 봤다. 크기가 마음에 안 들면 붙이고,
-    다시 띄우고, 다시 붙이는 왕복을 해야 했다.
+    크기를 고를 때 붙이고 Claude Code 를 다시 띄우는 왕복 없이 비교할 수 있게 한다.
 
     상태줄을 그리는 그 코드를 그대로 부른다. 따로 그리면 실제와 다른 것을 보여 주게 된다.
     """
@@ -229,18 +228,13 @@ def command(size):
 def any_plmi(entry):
     """어느 판이든 플밍이면 True.
 
-    `mine` 은 지금 이 파일이 낸 경로만 알아본다. 붙인 자리를 찾을 때는 그것으로 부족하다.
-    brew 로 깐 것, 클론해 쓰는 것, 옛 경로에 남은 것이 다 다른 경로를 갖는다.
+    경로로 알아보면 안 된다. brew 로 깐 것, 클론해 쓰는 것, 옛 경로에 남은 것이 다 다른
+    경로를 갖는데 모두 같은 플밍이다.
     """
     if not isinstance(entry, dict):
         return False
     cmd = str(entry.get("command", ""))
     return "PLMI_SIZE" in cmd and "statusline.py" in cmd
-
-
-def mine(entry):
-    """이 저장소가 넣은 statusLine 인지 본다. 남의 것을 말없이 덮지 않으려는 것이다."""
-    return isinstance(entry, dict) and RUNNER in str(entry.get("command", ""))
 
 
 def main():
@@ -301,8 +295,8 @@ def main():
         if not now:
             print("붙어 있는 statusLine 이 없다")
             return
-        # 어느 사본이 붙였든 뗄 수 있어야 한다. mine 은 지금 이 파일이 낸 경로만
-        # 알아봐서, 저장소에서 쓰던 것이나 옛 판이 붙인 것을 남의 것으로 보고 거부했다.
+        # 어느 사본이 붙였든 뗄 수 있어야 한다. 저장소에서 쓰던 것이나 옛 판이 붙인 것도
+        # 플밍이다.
         if not any_plmi(now) and not a.force:
             sys.exit(f"플밍이가 아닌 statusLine 이 있다. 그대로 둔다\n  {now.get('command')}")
         data.pop("statusLine", None)
@@ -312,7 +306,9 @@ def main():
             sweep(path)
         return
 
-    if now and not mine(now) and not a.force:
+    # 다른 사본이 붙인 플밍이는 갈아 끼운다. 클론해 쓰던 사람이 brew 로 옮길 때 경로가
+    # 달라도 --force 를 알아야 하면 안 된다. 막는 것은 플밍이가 아닌 상태줄뿐이다.
+    if now and not any_plmi(now) and not a.force:
         sys.exit("이미 다른 statusLine 이 있다. 덮으려면 --force\n"
                  f"  지금: {now.get('command')}\n"
                  f"  넣으려던 것: {command(a.size)}")

@@ -63,12 +63,12 @@ def test_다른_설정을_남긴다():
 def test_남의_statusLine_을_안_덮는다():
     with tempfile.TemporaryDirectory() as d:
         os.makedirs(os.path.join(d, ".claude"))
-        mine = {"type": "command", "command": "echo 남의것"}
+        theirs = {"type": "command", "command": "echo 남의것"}
         with open(os.path.join(d, ".claude", "settings.json"), "w", encoding="utf-8") as f:
-            json.dump({"statusLine": mine}, f, ensure_ascii=False)
+            json.dump({"statusLine": theirs}, f, ensure_ascii=False)
         out = run(d)
         assert out.returncode != 0, "덮어써 버렸다"
-        assert settings(d)["statusLine"] == mine
+        assert settings(d)["statusLine"] == theirs
 
         assert run(d, "--force").returncode == 0
         assert "statusline.py" in settings(d)["statusLine"]["command"]
@@ -77,11 +77,11 @@ def test_남의_statusLine_을_안_덮는다():
 def test_남의_statusLine_은_안_뗀다():
     with tempfile.TemporaryDirectory() as d:
         os.makedirs(os.path.join(d, ".claude"))
-        mine = {"type": "command", "command": "echo 남의것"}
+        theirs = {"type": "command", "command": "echo 남의것"}
         with open(os.path.join(d, ".claude", "settings.json"), "w", encoding="utf-8") as f:
-            json.dump({"statusLine": mine}, f, ensure_ascii=False)
+            json.dump({"statusLine": theirs}, f, ensure_ascii=False)
         assert run(d, "--uninstall").returncode != 0
-        assert settings(d)["statusLine"] == mine
+        assert settings(d)["statusLine"] == theirs
 
 
 def test_dry_run_은_안_쓴다():
@@ -258,7 +258,7 @@ def test_창보다_큰_크기는_막는다():
         assert out.returncode == 0, out.stderr
 
 def test_붙이지_않고_미리_볼_수_있다():
-    """전에는 붙이고 Claude Code 를 다시 띄워야 처음 봤다. 크기 고르는 왕복이 있었다."""
+    """붙이지 않고 그 크기를 볼 수 있어야 크기를 고를 때 다시 띄우는 왕복이 없다."""
     with tempfile.TemporaryDirectory() as d:
         out = bare("--preview", "0.2", "--size", grid.sizes()[-1],
                    "--scope", "project", "--dir", d, cwd=d)
@@ -267,7 +267,7 @@ def test_붙이지_않고_미리_볼_수_있다():
         # 미리 보기에만 있는 안내다. 이게 없으면 그냥 붙인 것이다
         assert "Ctrl+C" in out.stdout, out.stdout
         # 사람이 키보드로 치는 문자만 쓴다. em dash 는 쉼표나 마침표로 대신한다
-        assert "—" not in out.stdout, out.stdout
+        assert "\u2014" not in out.stdout, out.stdout
         assert settings(d) is None, "미리 보기가 설정을 건드렸다"
 
 
@@ -290,8 +290,8 @@ def test_떼는_순서를_안_지켜도_조용하다():
 def test_어느_사본이_붙였든_뗀다():
     """저장소에서 쓰던 것이나 옛 판이 붙인 것도 뗄 수 있어야 한다.
 
-    mine 은 지금 이 파일이 낸 경로만 알아본다. 그것으로 거르면 홈에 남은 다른 사본의
-    설정을 --force 없이는 못 뗀다. 실제로 그래서 손으로 지워야 했다.
+    경로로 거르면 홈에 남은 다른 사본의 설정을 --force 없이는 못 뗀다. 실제로 그래서
+    손으로 지운 적이 있다.
     """
     with tempfile.TemporaryDirectory() as d:
         os.makedirs(os.path.join(d, ".claude"))
@@ -301,3 +301,19 @@ def test_어느_사본이_붙였든_뗀다():
             json.dump({"statusLine": other}, f, ensure_ascii=False)
         assert run(d, "--uninstall").returncode == 0
         assert settings(d) is None
+
+
+def test_다른_사본이_붙인_자리에_그냥_붙는다():
+    """클론해 쓰던 사람이 brew 로 옮길 때 경로가 달라도 --force 를 알아야 하면 안 된다.
+
+    막는 것은 플밍이가 아닌 상태줄뿐이다.
+    """
+    with tempfile.TemporaryDirectory() as d:
+        os.makedirs(os.path.join(d, ".claude"))
+        other = {"type": "command",
+                 "command": "PLMI_SIZE=16x8 python3 /어딘가/다른사본/statusline.py"}
+        with open(os.path.join(d, ".claude", "settings.json"), "w", encoding="utf-8") as f:
+            json.dump({"statusLine": other}, f, ensure_ascii=False)
+        out = run(d)
+        assert out.returncode == 0, out.stderr
+        assert "다른사본" not in settings(d)["statusLine"]["command"]
