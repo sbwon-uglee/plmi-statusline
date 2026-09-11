@@ -209,38 +209,37 @@ def frame(name=None, when=None, fps=None):
                            * (fps or a["fps"])) % n]
 
 
-DOTS = ["", ".", "..", "..."]
-BUSY = ("작업중", "생각중", "승인대기")
+DOTS = 3              # 문구 뒤에서 늘어나는 점의 최대 개수
 
-# 말하는 박자. 말풍선이 한 번 떠서 그대로 있으면 그림 옆에 붙은 딱지로 보인다.
-# 일이 난 순간부터 한 글자씩 나오고, 머물고, 쉬었다가 다시 말한다.
-# (다 말하는 데 드는 초, 다 말하고 머무는 초, 쉬는 초). 쉬는 초가 None 이면 한 번 말하고 그친다.
-# 짧은 말은 글자당 1초보다 빨리 나오지 않는다.
-TALK = (3.0, 3.0, 3.0)
+# 말풍선 박자. 말풍선이 한 번 떠서 그대로 있으면 그림 옆에 붙은 딱지로 보인다.
+# 일이 난 순간 문구가 한꺼번에 뜨고, 뒤에서 점이 하나씩 늘고, 쉬었다가 다시 뜬다.
+# (점 하나 느는 초, 떠 있는 초, 쉬는 초). 떠 있는 초가 None 이면 안 사라지고,
+# 쉬는 초가 None 이면 한 번 떴다가 그친다.
+# 점 간격은 상태줄이 불리는 간격보다 짧으면 안 된다. 쉴 때는 초당 한 번 불리므로 0.5초로
+# 늘리면 볼 때마다 두 칸씩 건너뛰어 점이 없다가 두 개였다가만 되풀이한다.
+TALK = (1.0, 4.0, 3.0)
 RHYTHM = {
-    # 지금 무슨 일인지 알려 주는 정보라 빨리 말하고 오래 머물며 쉬지 않는다
-    "작업중": (1.2, 9.0, 0.0),
-    "생각중": (1.2, 9.0, 0.0),
-    "승인대기": (1.2, 9.0, 0.0),
+    # 지금 무슨 일인지 알려 주는 정보라 사라지지 않는다. 일하는 중에는 초당 여섯 번쯤 불린다
+    "작업중": (0.5, None, None),
+    "생각중": (0.5, None, None),
+    # 허락을 기다리는 동안은 일이 멈춰 있어 쉴 때처럼 드물게 불린다
+    "승인대기": (1.0, None, None),
     # 한 번 외치는 말이다. 되풀이하면 끊긴 뒤 다음 말을 걸 때까지 계속 앗 앗 한다
-    "놀람": (1.0, 3.0, None),
+    "놀람": (1.0, 4.0, None),
     # 4초만 떠 있는 상태라 쉬는 구간에 걸리면 못 보고 지나간다
-    "완료": (1.0, 3.0, None),
+    "완료": (1.0, 4.0, None),
 }
 
 
-def speak(size, at, rhythm=TALK):
-    """말을 꺼낸 지 at 초 지났을 때 몇 글자를 보여 줄지. 말풍선이 없는 구간이면 None."""
-    say, hold, rest = rhythm
-    step = min(1.0, max(0.1, say / max(1, size)))
-    typing = step * size
-    if rest is not None:
-        at %= typing + hold + rest
-    if at < typing:
-        return int(at / step) + 1
-    if at < typing + hold:
-        return size
-    return None
+def speak(at, rhythm=TALK):
+    """말을 꺼낸 지 at 초 지났을 때 문구 뒤에 붙일 점 개수. 말풍선이 없는 구간이면 None."""
+    beat, hold, rest = rhythm
+    if hold is not None:
+        if rest is not None:
+            at %= hold + rest
+        if at >= hold:
+            return None
+    return int(at / beat) % (DOTS + 1)
 # 한 바퀴에 걸리는 초. 프레임 수가 달라도 속도를 맞춘다. 쉴 때는 초당 한 번만 그려지므로
 # 1초에 16%씩 돈다. 이웃 자세로만 넘어가야 숨쉬는 것으로 보이고, 크게 건너뛰면 튀어 보인다.
 # 3.0 이나 4.0 처럼 프레임 수와 딱 나누어떨어지는 값은 피한다. 같은 자세 서너 개만 반복한다.
@@ -282,14 +281,14 @@ def tinted(lines, tint, palette, cw, back=None):
 
 
 def panel(name=None, text="", when=None, cycle=CYCLE, since=None):
-    """그림과 말풍선을 한 장으로 만든다. 일하는 중이면 문구 뒤에 점을 붙여 돌린다.
+    """그림과 말풍선을 한 장으로 만든다. 말풍선 문구 뒤에는 점을 붙여 돌린다.
 
     프레임 속도 대신 한 바퀴 도는 시간을 맞춘다. statusline 은 쉴 때 `refreshInterval`
     한계인 초당 한 번만 불리므로, 한 바퀴가 짧아야 그 한 번에 자세가 크게 바뀐다.
     48장짜리를 8fps 로 돌리면 한 번에 6분의 1바퀴라 멈춘 것으로 보인다.
 
-    since 는 그 말을 꺼낸 시각이다. 말풍선이 몇 글자까지 나왔는지를 여기서 지난 초로
-    정한다. statusline 은 부를 때마다 새로 뜨는 프로세스라 앞에서 몇 글자를 보였는지
+    since 는 그 말을 꺼낸 시각이다. 점이 몇 개인지, 말풍선이 떠 있는지를 여기서 지난 초로
+    정한다. statusline 은 부를 때마다 새로 뜨는 프로세스라 앞에서 점을 몇 개 보였는지
     기억할 수 없고, 사건 시각은 대화 기록에 있어 어느 프로세스에서 봐도 같다.
     """
     from bubble import beside, draw
@@ -306,21 +305,16 @@ def panel(name=None, text="", when=None, cycle=CYCLE, since=None):
     art = a["frames"][i]
     if BUBBLE and text:
         said = text.rstrip()
-        say, hold, rest = RHYTHM.get(name, TALK)
+        beat, hold, rest = RHYTHM.get(name, TALK)
         if since is None:
             # 언제 꺼낸 말인지 모르면 벽시계로 맞춘다. 한 번만 할 말도 되풀이해야 보인다
             at, rest = t, TALK[2] if rest is None else rest
         else:
             at = max(0.0, t - since)
-        shown = speak(len(said), at, (say, hold, rest))
-        if shown is not None:
-            full = said
-            if name in BUSY:
-                # 점은 다 말한 뒤에만 돌린다. 상자는 점 세 개 자리까지 미리 잡는다
-                full = said + DOTS[-1]
-                if shown == len(said):
-                    shown += len(DOTS[int(t * 2) % len(DOTS)])
-            art = beside(art, draw(full, cols=22, shown=shown))
+        dots = speak(at, (beat, hold, rest))
+        if dots is not None:
+            # 상자는 점이 다 찼을 때 크기로 잡는다. 점이 늘 때마다 상자가 커지면 그림이 흔들린다
+            art = beside(art, draw(said + "." * DOTS, cols=22, shown=len(said) + dots))
     if COLOR and a.get("tints"):
         art = "\n".join(tinted(art.split("\n"), a["tints"][i], a["palette"], a["cw"],
                                 (a.get("backs") or [None] * n)[i]))
