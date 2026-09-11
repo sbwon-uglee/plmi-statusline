@@ -201,28 +201,34 @@ def main():
           "test_runtime", "test_오래_쉬면_심심하다고_한다",
           "심심해 문구 제거", out)
 
-    guard([STATUS], swap(STATUS, "        return int(at / step) + 1", "        return size"),
-          "test_runtime", "test_말풍선은_한_글자씩_나온다",
-          "말풍선이 한꺼번에 뜸", out)
+    guard([STATUS], swap(STATUS, "    return int(at / beat) % (DOTS + 1)", "    return 0"),
+          "test_runtime", "test_문구는_한꺼번에_뜨고_점이_하나씩_는다",
+          "점이 안 늚", out)
+    guard([STATUS], swap(STATUS, "TALK = (1.0, 4.0, 3.0)", "TALK = (0.5, 4.0, 3.0)"),
+          "test_runtime", "test_쉴_때_불리는_간격으로_봐도_점이_하나씩_는다",
+          "쉴 때 점을 너무 빨리 늘림", out)
+    guard([STATUS], swap(STATUS, '    "승인대기": (1.0, None, None),', '    "승인대기": (0.5, None, None),'),
+          "test_runtime", "test_쉴_때_불리는_간격으로_봐도_점이_하나씩_는다",
+          "허락 기다릴 때 점을 너무 빨리 늘림", out)
     guard([BUBBLE], swap(BUBBLE, "    body = wrap(text, cols)",
                          "    body = wrap(text if shown is None else text[:shown], cols)"),
-          "test_runtime", "test_말하는_동안_상자_크기가_그대로다",
+          "test_runtime", "test_말풍선이_떠_있는_동안_상자_크기가_그대로다",
           "보이는 글자로 상자를 잼", out)
-    guard([STATUS], swap(STATUS, "                full = said + DOTS[-1]",
-                         "                full = said + DOTS[int(t * 2) % len(DOTS)]"),
-          "test_runtime", "test_말하는_동안_상자_크기가_그대로다",
-          "도는 점이 상자를 흔듦", out)
-    guard([STATUS], swap(STATUS, "TALK = (3.0, 3.0, 3.0)", "TALK = (3.0, 3.0, 0.0)"),
+    guard([STATUS], swap(STATUS, 'draw(said + "." * DOTS, cols=22, shown=len(said) + dots)',
+                         'draw(said + "." * dots, cols=22)'),
+          "test_runtime", "test_말풍선이_떠_있는_동안_상자_크기가_그대로다",
+          "느는 점이 상자를 흔듦", out)
+    guard([STATUS], swap(STATUS, "TALK = (1.0, 4.0, 3.0)", "TALK = (1.0, 4.0, 0.0)"),
           "test_runtime", "test_수다는_쉬었다가_다시_말한다",
           "수다가 쉬지 않음", out)
     guard([STATUS], swap(STATUS, "            at = max(0.0, t - since)", "            at = t"),
           "test_runtime", "test_일이_난_순간부터_말한다",
           "사건 시각 대신 벽시계", out)
-    guard([STATUS], swap(STATUS, "    if rest is not None:\n        at %= typing + hold + rest",
-                         "    at %= typing + hold + (rest or 0.0)"),
+    guard([STATUS], swap(STATUS, "        if rest is not None:\n            at %= hold + rest",
+                         "        at %= hold + (rest or 0.0)"),
           "test_runtime", "test_외치는_말은_한_번만_한다",
           "외치는 말을 되풀이", out)
-    guard([STATUS], swap(STATUS, '    "작업중": (1.2, 9.0, 0.0),', '    "작업중": (1.2, 9.0, 3.0),'),
+    guard([STATUS], swap(STATUS, '    "작업중": (0.5, None, None),', '    "작업중": (0.5, 4.0, 3.0),'),
           "test_runtime", "test_일하는_중에는_말풍선이_안_사라진다",
           "일하는 중에 쉼", out)
     guard([STATUS], swap(STATUS, "            at, rest = t, TALK[2] if rest is None else rest",
