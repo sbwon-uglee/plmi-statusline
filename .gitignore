@@ -1,0 +1,5 @@
+__pycache__/
+*.pyc
+.DS_Store
+plmi/sprites/state.json
+플밍이_전프레임_*.html
